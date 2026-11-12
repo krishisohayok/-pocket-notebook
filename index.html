@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pocket Notebook</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f2f5f9;color:#202938}
+header{background:#2457c5;color:white;padding:20px;text-align:center}
+main{max-width:700px;margin:auto;padding:16px}
+.card{background:white;padding:16px;border-radius:12px;margin:12px 0;box-shadow:0 2px 8px #0001}
+input,textarea,select,button{width:100%;padding:12px;margin:6px 0;border:1px solid #ccd3df;border-radius:8px;font-size:16px}
+textarea{min-height:110px}
+button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
+.secondary{background:#65758b}
+.danger{background:#c0392b}
+.note{border-left:4px solid #2457c5}
+.note h3{margin:4px 0}
+.small{font-size:13px;color:#65758b}
+.actions{display:flex;gap:8px}
+.actions button{flex:1}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+<h2>📒 Pocket Notebook</h2>
+<p>আপনার ব্যক্তিগত ডিজিটাল নোটবুক</p>
+</header>
+
+<main>
+<section id="auth" class="card">
+<h3>অ্যাকাউন্টে প্রবেশ করুন</h3>
+<input id="email" type="email" placeholder="আপনার ইমেইল">
+<input id="password" type="password" placeholder="পাসওয়ার্ড">
+<button onclick="signUp()">নতুন অ্যাকাউন্ট তৈরি</button>
+<button onclick="signIn()" class="secondary">লগইন করুন</button>
+<p id="authMsg" class="small"></p>
+</section>
+
+<section id="app" class="hidden">
+<div class="card">
+<p id="userInfo"></p>
+<button class="secondary" onclick="signOut()">লগআউট</button>
+<h3>নতুন নোট লিখুন</h3>
+<input id="title" placeholder="নোটের শিরোনাম">
+<select id="category">
+<option>ব্যক্তিগত</option>
+<option>কাজ</option>
+<option>পড়াশোনা</option>
+<option>কৃষি</option>
+<option>অন্যান্য</option>
+</select>
+<textarea id="content" placeholder="আপনার নোট লিখুন..."></textarea>
+<button onclick="saveNote()">নোট সংরক্ষণ করুন</button>
+<p id="saveMsg" class="small"></p>
+</div>
+
+<div class="card">
+<h3>আমার নোট</h3>
+<input id="search" placeholder="নোট খুঁজুন..." oninput="renderNotes()">
+<div id="notes"></div>
+</div>
+</section>
+</main>
+
+<script>
+const SUPABASE_URL = "https://pcxfeframdfqnksoouyo.supabase.co";
+const SUPABASE_KEY = "sb_publishable__hT8q7kVm3vImNmOzs59hA_AuaZVtbe";
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let currentUser = null;
+let allNotes = [];
+let editingId = null;
+
+function localKey(){
+ return currentUser ? "pocket_notes_" + currentUser.id : "pocket_notes_guest";
+}
+
+function loadLocal(){
+ try{return JSON.parse(localStorage.getItem(localKey()) || "[]")}
+ catch(e){return []}
+}
+
+function saveLocal(){
+ localStorage.setItem(localKey(), JSON.stringify(allNotes));
+}
+
+async function signUp(){
+ const email = document.getElementById("email").value.trim();
+ const password = document.getElementById("password").value;
+ if(!email || password.length < 6){
+  authMsg.textContent = "সঠিক ইমেইল দিন এবং অন্তত ৬ অক্ষরের পাসওয়ার্ড ব্যবহার করুন।";
+  return;
+ }
+ const {data,error} = await db.auth.signUp({email,password});
+ authMsg.textContent = error ? error.message : "অ্যাকাউন্ট তৈরি হয়েছে। ইমেইল যাচাই করতে হতে পারে।";
+ if(data.session) await startApp(data.session.user);
+}
+
+async function signIn(){
+ const email = document.getElementById("email").value.trim();
+ const password = document.getElementById("password").value;
+ const {data,error} = await db.auth.signInWithPassword({email,password});
+ authMsg.textContent = error ? error.message : "লগইন সফল!";
+ if(data.session) await startApp(data.session.user);
+}
+
+async function signOut(){
+ await db.auth.signOut();
+ currentUser = null;
+ allNotes = [];
+ app.classList.add("hidden");
+ auth.classList.remove("hidden");
+}
+
+async function startApp(user){
+ currentUser = user;
+ auth.classList.add("hidden");
+ app.classList.remove("hidden");
+ userInfo.textContent = "লগইন: " + user.email;
+ allNotes = loadLocal();
+ renderNotes();
+ await syncNotes();
+}
+
+async function syncNotes(){
+ const {data,error} = await db.from("notes")
+ .select("*").eq("user_id",currentUser.id)
+ .order("created_at",{ascending:false});
+ if(error){
+  saveMsg.textContent = "ক্লাউড সংযোগে সমস্যা: " + error.message;
+  return;
+ }
+ allNotes = data || [];
+ saveLocal();
+ renderNotes();
+}
+
+async function saveNote(){
+ const titleValue = title.value.trim();
+ const contentValue = content.value.trim();
+ if(!titleValue && !contentValue){
+  saveMsg.textContent = "আগে কিছু লিখুন।";
+  return;
+ }
+
+ const note = {
+  title:titleValue || "শিরোনামহীন নোট",
+  content:contentValue,
+  category:category.value,
+  user_id:currentUser.id
+ };
+
+ let result;
+ if(editingId){
+  result = await db.from("notes").update(note)
+  .eq("id",editingId).eq("user_id",currentUser.id);
+ }else{
+  result = await db.from("notes").insert(note);
+ }
+
+ if(result.error){
+  saveMsg.textContent = "সংরক্ষণ হয়নি: " + result.error.message;
+  return;
+ }
+
+ title.value="";
+ content.value="";
+ editingId=null;
+ saveMsg.textContent="নোট সংরক্ষিত হয়েছে।";
+ await syncNotes();
+}
+
+function renderNotes(){
+ const q = search.value.toLowerCase();
+ const box = document.getElementById("notes");
+ box.innerHTML="";
+ const filtered = allNotes.filter(n =>
+  (n.title || "").toLowerCase().includes(q) ||
+  (n.content || "").toLowerCase().includes(q)
+ );
+
+ if(!filtered.length){
+  box.innerHTML="<p>এখনও কোনো নোট নেই।</p>";
+  return;
+ }
+
+ filtered.forEach(n=>{
+  const div=document.createElement("div");
+  div.className="card note";
+  const h=document.createElement("h3");
+  h.textContent=n.title || "শিরোনামহীন নোট";
+  const p=document.createElement("p");
+  p.textContent=n.content || "";
+  const small=document.createElement("p");
+  small.className="small";
+  small.textContent=n.category || "অন্যান্য";
+  const actions=document.createElement("div");
+  actions.className="actions";
+
+  const edit=document.createElement("button");
+  edit.textContent="এডিট";
+  edit.onclick=()=>editNote(n.id);
+
+  const del=document.createElement("button");
+  del.textContent="মুছুন";
+  del.className="danger";
+  del.onclick=()=>deleteNote(n.id);
+
+  actions.append(edit,del);
+  div.append(h,p,small,actions);
+  box.append(div);
+ });
+}
+
+function editNote(id){
+ const n=allNotes.find(x=>x.id===id);
+ if(!n)return;
+ title.value=n.title || "";
+ content.value=n.content || "";
+ category.value=n.category || "ব্যক্তিগত";
+ editingId=id;
+ window.scrollTo({top:0,behavior:"smooth"});
+}
+
+async function deleteNote(id){
+ if(!confirm("এই নোটটি মুছে ফেলবেন?"))return;
+ const {error}=await db.from("notes").delete()
+ .eq("id",id).eq("user_id",currentUser.id);
+ if(error){
+  saveMsg.textContent="মুছতে সমস্যা হয়েছে: "+error.message;
+  return;
+ }
+ await syncNotes();
+}
+
+db.auth.getSession().then(({data})=>{
+ if(data.session) startApp(data.session.user);
+});
+</script>
+</body>
+</html>
