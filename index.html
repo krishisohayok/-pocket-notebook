@@ -176,47 +176,74 @@ async function saveNote(){
 }
 
 function renderNotes(){
- const q = search.value.toLowerCase();
+ const q = document.getElementById("search").value.toLowerCase();
  const box = document.getElementById("notes");
- box.innerHTML="";
- const filtered = allNotes.filter(n =>
+ box.innerHTML = "";
+
+ const filtered = [...allNotes]
+ .filter(n =>
   (n.title || "").toLowerCase().includes(q) ||
   (n.content || "").toLowerCase().includes(q)
- );
+ )
+ .sort((a,b) => Number(!!b.is_pinned) - Number(!!a.is_pinned));
 
  if(!filtered.length){
-  box.innerHTML="<p>এখনও কোনো নোট নেই।</p>";
+  box.innerHTML = "<p>এখনও কোনো নোট নেই।</p>";
   return;
  }
 
  filtered.forEach(n=>{
-  const div=document.createElement("div");
-  div.className="card note";
-  const h=document.createElement("h3");
-  h.textContent=n.title || "শিরোনামহীন নোট";
-  const p=document.createElement("p");
-  p.textContent=n.content || "";
-  const small=document.createElement("p");
-  small.className="small";
-  small.textContent=n.category || "অন্যান্য";
-  const actions=document.createElement("div");
-  actions.className="actions";
+  const div = document.createElement("div");
+  div.className = "card note";
 
-  const edit=document.createElement("button");
-  edit.textContent="এডিট";
-  edit.onclick=()=>editNote(n.id);
+  const h = document.createElement("h3");
+  h.textContent = n.title || "শিরোনামহীন নোট";
 
-  const del=document.createElement("button");
-  del.textContent="মুছুন";
-  del.className="danger";
-  del.onclick=()=>deleteNote(n.id);
+  const p = document.createElement("p");
+  p.textContent = n.content || "";
 
-  actions.append(edit,del);
-  div.append(h,p,small,actions);
+  const small = document.createElement("p");
+  small.className = "small";
+  small.textContent = (n.is_pinned ? "📌 পিন করা • " : "") + (n.category || "অন্যান্য");
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const pin = document.createElement("button");
+  pin.textContent = n.is_pinned ? "📌 আনপিন" : "📌 পিন";
+  pin.className = "secondary";
+  pin.onclick = () => togglePin(n.id, n.is_pinned);
+
+  const edit = document.createElement("button");
+  edit.textContent = "এডিট";
+  edit.onclick = () => editNote(n.id);
+
+  const del = document.createElement("button");
+  del.textContent = "মুছুন";
+  del.className = "danger";
+  del.onclick = () => deleteNote(n.id);
+
+  actions.append(pin, edit, del);
+  div.append(h, p, small, actions);
   box.append(div);
  });
 }
 
+async function togglePin(id, isPinned){
+ const {error} = await db.from("notes")
+ .update({is_pinned: !isPinned})
+ .eq("id", id)
+ .eq("user_id", currentUser.id);
+
+ if(error){
+  document.getElementById("saveMsg").textContent = "পিন করতে সমস্যা: " + error.message;
+  return;
+ }
+
+ await syncNotes();
+ document.getElementById("saveMsg").textContent = "নোটের পিন পরিবর্তন হয়েছে।";
+}
+ 
 function editNote(id){
  const n=allNotes.find(x=>x.id===id);
  if(!n)return;
