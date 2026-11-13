@@ -91,6 +91,14 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 </div>
 
 <input id="search" placeholder="নোট খুঁজুন..." oninput="renderNotes()">
+ <h3>📥 Backup & Export</h3>
+<button onclick="exportBackup()">📥 সব নোট Backup করুন</button>
+
+<label style="display:block;margin-top:12px">
+  পুরোনো Backup ফিরিয়ে আনুন
+</label>
+<input type="file" id="backupFile" accept=".json,application/json" onchange="importBackup(event)">
+<p class="small">আপনার Backup ফাইল নির্বাচন করুন।</p>
 <div id="notes"></div>
 </div>
 
@@ -393,6 +401,103 @@ async function permanentDelete(id){
  $("saveMsg").textContent="নোট স্থায়ীভাবে মুছে ফেলা হয়েছে।";
 }
 
+function exportBackup(){
+
+ if(!currentUser){
+  alert("আগে লগইন করুন।");
+  return;
+ }
+
+ const backup={
+  app:"Pocket Notebook",
+  version:1,
+  exported_at:new Date().toISOString(),
+  notes:allNotes.map(n=>({
+   title:n.title || "",
+   content:n.content || "",
+   category:n.category || "অন্যান্য",
+   color:n.color || "#ffffff",
+   is_pinned:!!n.is_pinned,
+   deleted_at:n.deleted_at || null
+  }))
+ };
+
+ const blob=new Blob(
+  [JSON.stringify(backup,null,2)],
+  {type:"application/json"}
+ );
+
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+
+ a.href=url;
+ a.download="Pocket-Notebook-Backup.json";
+ document.body.appendChild(a);
+ a.click();
+ a.remove();
+
+ URL.revokeObjectURL(url);
+
+ $("saveMsg").textContent="Backup ডাউনলোড হয়েছে! 📥";
+}
+
+async function importBackup(event){
+
+ const file=event.target.files[0];
+
+ if(!file)return;
+
+ try{
+
+  const text=await file.text();
+  const backup=JSON.parse(text);
+
+  if(backup.app!=="Pocket Notebook" ||
+     !Array.isArray(backup.notes)){
+   throw new Error("সঠিক Pocket Notebook Backup ফাইল নয়।");
+  }
+
+  if(!confirm(
+   backup.notes.length+
+   "টি নোট Import করবেন? আগের নোট মুছবে না, নতুন কপি যুক্ত হবে।"
+  )){
+   event.target.value="";
+   return;
+  }
+
+  const notes=backup.notes.map(n=>({
+   title:String(n.title || "শিরোনামহীন নোট"),
+   content:String(n.content || ""),
+   category:String(n.category || "অন্যান্য"),
+   color:typeof n.color==="string" ? n.color : "#ffffff",
+   is_pinned:!!n.is_pinned,
+   deleted_at:n.deleted_at || null,
+   user_id:currentUser.id
+  }));
+
+  if(notes.length===0){
+   alert("Backup-এ কোনো নোট নেই।");
+   return;
+  }
+
+  const {error}=await db.from("notes").insert(notes);
+
+  if(error)throw error;
+
+  await syncNotes();
+
+  $("saveMsg").textContent=
+   "Backup থেকে "+notes.length+"টি নোট ফিরিয়ে আনা হয়েছে!";
+
+ }catch(error){
+
+  alert("Backup Import করতে সমস্যা: "+error.message);
+
+ }finally{
+  event.target.value="";
+ }
+}
+ 
 db.auth.getSession().then(({data})=>{
  if(data.session) startApp(data.session.user);
 });
