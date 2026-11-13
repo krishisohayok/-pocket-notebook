@@ -313,14 +313,43 @@ function renderNotes(){
    del.className="danger";
    del.onclick=()=>deleteNote(n.id);
 
-   actions.append(pin,edit,del);
+   const share=document.createElement("button");
+share.textContent="📤 শেয়ার";
+share.className="secondary";
+share.onclick=()=>shareNote(n);
+
+actions.append(share,pin,edit,del);
   }
 
   div.append(h,p,small,actions);
   box.append(div);
  });
 }
+async function shareNote(n){
 
+ const title=n.title || "Pocket Notebook";
+ const text=title+"\n\n"+(n.content || "");
+
+ if(navigator.share){
+  try{
+   await navigator.share({
+    title:title,
+    text:text
+   });
+  }catch(error){
+   if(error.name!=="AbortError"){
+    $("saveMsg").textContent="Share করতে সমস্যা হয়েছে।";
+   }
+  }
+ }else{
+  try{
+   await navigator.clipboard.writeText(text);
+   $("saveMsg").textContent="নোট কপি হয়েছে। এখন শেয়ার করুন।";
+  }catch(error){
+   prompt("নোটটি কপি করুন:",text);
+  }
+ }
+}
 async function togglePin(id,isPinned){
  const {error}=await db.from("notes")
  .update({is_pinned:!isPinned})
