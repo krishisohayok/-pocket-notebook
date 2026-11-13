@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -17,13 +18,16 @@ textarea{min-height:110px}
 button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 .secondary{background:#65758b}
 .danger{background:#c0392b}
+.restore{background:#218838}
 .note{border-left:5px solid #2457c5}
 .note h3{margin:4px 0}
 .small{font-size:13px;color:#65758b}
-.actions{display:flex;gap:8px}
-.actions button{flex:1}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions button{flex:1;min-width:90px}
 .hidden{display:none}
 .color-label{font-weight:bold;margin-top:10px;display:block}
+.tabs{display:flex;gap:8px}
+.tabs button{flex:1}
 </style>
 </head>
 
@@ -51,7 +55,6 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <button class="secondary" onclick="signOut()">লগআউট</button>
 
 <h3>নতুন নোট লিখুন</h3>
-
 <input id="title" placeholder="নোটের শিরোনাম">
 
 <select id="category">
@@ -80,7 +83,13 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 </div>
 
 <div class="card">
-<h3>আমার নোট</h3>
+<h3>📒 আমার নোট</h3>
+
+<div class="tabs">
+<button id="activeTab" onclick="showActive()">আমার নোট</button>
+<button id="trashTab" class="secondary" onclick="showTrash()">🗑️ Trash</button>
+</div>
+
 <input id="search" placeholder="নোট খুঁজুন..." oninput="renderNotes()">
 <div id="notes"></div>
 </div>
@@ -98,29 +107,30 @@ const db = window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 let currentUser = null;
 let allNotes = [];
 let editingId = null;
+let trashMode = false;
 
-function signUp(){
- const email=document.getElementById("email").value.trim();
- const password=document.getElementById("password").value;
+const $ = id => document.getElementById(id);
+
+async function signUp(){
+ const email=$("email").value.trim();
+ const password=$("password").value;
 
  if(!email || password.length<6){
-  authMsg.textContent="সঠিক ইমেইল এবং অন্তত ৬ অক্ষরের পাসওয়ার্ড দিন।";
+  $("authMsg").textContent="সঠিক ইমেইল এবং অন্তত ৬ অক্ষরের পাসওয়ার্ড দিন।";
   return;
  }
 
- db.auth.signUp({email,password}).then(({data,error})=>{
-  authMsg.textContent=error ? error.message : "অ্যাকাউন্ট তৈরি হয়েছে।";
-  if(data.session) startApp(data.session.user);
- });
+ const {data,error}=await db.auth.signUp({email,password});
+ $("authMsg").textContent=error ? error.message : "অ্যাকাউন্ট তৈরি হয়েছে।";
+ if(data.session) await startApp(data.session.user);
 }
 
 async function signIn(){
- const email=document.getElementById("email").value.trim();
- const password=document.getElementById("password").value;
+ const email=$("email").value.trim();
+ const password=$("password").value;
 
  const {data,error}=await db.auth.signInWithPassword({email,password});
-
- authMsg.textContent=error ? error.message : "লগইন সফল!";
+ $("authMsg").textContent=error ? error.message : "লগইন সফল!";
  if(data.session) await startApp(data.session.user);
 }
 
@@ -128,16 +138,15 @@ async function signOut(){
  await db.auth.signOut();
  currentUser=null;
  allNotes=[];
- app.classList.add("hidden");
- auth.classList.remove("hidden");
+ $("app").classList.add("hidden");
+ $("auth").classList.remove("hidden");
 }
 
 async function startApp(user){
  currentUser=user;
- auth.classList.add("hidden");
- app.classList.remove("hidden");
- userInfo.textContent="লগইন: "+user.email;
-
+ $("auth").classList.add("hidden");
+ $("app").classList.remove("hidden");
+ $("userInfo").textContent="লগইন: "+user.email;
  await syncNotes();
 }
 
@@ -148,7 +157,7 @@ async function syncNotes(){
  .order("created_at",{ascending:false});
 
  if(error){
-  saveMsg.textContent="ক্লাউড সংযোগে সমস্যা: "+error.message;
+  $("saveMsg").textContent="ক্লাউড সমস্যা: "+error.message;
   return;
  }
 
@@ -157,75 +166,103 @@ async function syncNotes(){
 }
 
 async function saveNote(){
-
- const titleValue=title.value.trim();
- const contentValue=content.value.trim();
+ const titleValue=$("title").value.trim();
+ const contentValue=$("content").value.trim();
 
  if(!titleValue && !contentValue){
-  saveMsg.textContent="আগে কিছু লিখুন।";
+  $("saveMsg").textContent="আগে কিছু লিখুন।";
   return;
  }
 
  const note={
   title:titleValue || "শিরোনামহীন নোট",
   content:contentValue,
-  category:category.value,
-  color:noteColor.value,
+  category:$("category").value,
+  color:$("noteColor").value,
   user_id:currentUser.id
  };
 
  let result;
 
  if(editingId){
-  result=await db.from("notes")
-  .update(note)
+  result=await db.from("notes").update(note)
   .eq("id",editingId)
-  .eq("user_id",currentUser.id);
+  .eq("user_id",currentUser.id)
+  .is("deleted_at",null);
  }else{
   result=await db.from("notes").insert(note);
  }
 
  if(result.error){
-  saveMsg.textContent="সংরক্ষণ হয়নি: "+result.error.message;
+  $("saveMsg").textContent="সংরক্ষণ হয়নি: "+result.error.message;
   return;
  }
 
- title.value="";
- content.value="";
- noteColor.value="#ffffff";
- category.value="ব্যক্তিগত";
- editingId=null;
-
- cancelEdit.classList.add("hidden");
-
- saveMsg.textContent="নোট সংরক্ষিত হয়েছে। 🎉";
-
+ clearForm();
+ $("saveMsg").textContent="নোট সংরক্ষিত হয়েছে। 🎉";
  await syncNotes();
 }
 
-function renderNotes(){
+function clearForm(){
+ $("title").value="";
+ $("content").value="";
+ $("category").value="ব্যক্তিগত";
+ $("noteColor").value="#ffffff";
+ editingId=null;
+ $("cancelEdit").classList.add("hidden");
+}
 
- const q=document.getElementById("search").value.toLowerCase();
- const box=document.getElementById("notes");
+function cancelEditing(){
+ clearForm();
+ $("saveMsg").textContent="এডিট বাতিল হয়েছে।";
+}
+
+function showActive(){
+ trashMode=false;
+ $("activeTab").classList.remove("secondary");
+ $("trashTab").classList.add("secondary");
+ clearSearch();
+ renderNotes();
+}
+
+function showTrash(){
+ trashMode=true;
+ $("trashTab").classList.remove("secondary");
+ $("activeTab").classList.add("secondary");
+ clearSearch();
+ renderNotes();
+}
+
+function clearSearch(){
+ $("search").value="";
+}
+
+function renderNotes(){
+ const q=$("search").value.toLowerCase();
+ const box=$("notes");
  box.innerHTML="";
 
- const filtered=[...allNotes]
- .filter(n=>
-  (n.title || "").toLowerCase().includes(q) ||
-  (n.content || "").toLowerCase().includes(q)
- )
- .sort((a,b)=>Number(!!b.is_pinned)-Number(!!a.is_pinned));
+ let filtered=allNotes.filter(n=>{
+  const inTrash=!!n.deleted_at;
+  return inTrash===trashMode &&
+  ((n.title || "").toLowerCase().includes(q) ||
+  (n.content || "").toLowerCase().includes(q));
+ });
+
+ if(!trashMode){
+  filtered.sort((a,b)=>Number(!!b.is_pinned)-Number(!!a.is_pinned));
+ }
 
  if(!filtered.length){
-  box.innerHTML="<p>এখনও কোনো নোট নেই।</p>";
+  box.innerHTML=trashMode
+  ? "<p>Trash খালি আছে।</p>"
+  : "<p>এখনও কোনো নোট নেই।</p>";
   return;
  }
 
  filtered.forEach(n=>{
-
   const div=document.createElement("div");
   div.className="card note";
-
   div.style.backgroundColor=n.color || "#ffffff";
 
   const h=document.createElement("h3");
@@ -241,71 +278,106 @@ function renderNotes(){
   const actions=document.createElement("div");
   actions.className="actions";
 
-  const pin=document.createElement("button");
-  pin.textContent=n.is_pinned ? "📌 আনপিন" : "📌 পিন";
-  pin.className="secondary";
-  pin.onclick=()=>togglePin(n.id,n.is_pinned);
+  if(trashMode){
+   const restore=document.createElement("button");
+   restore.textContent="♻️ Restore";
+   restore.className="restore";
+   restore.onclick=()=>restoreNote(n.id);
 
-  const edit=document.createElement("button");
-  edit.textContent="এডিট";
-  edit.onclick=()=>editNote(n.id);
+   const permanent=document.createElement("button");
+   permanent.textContent="স্থায়ীভাবে মুছুন";
+   permanent.className="danger";
+   permanent.onclick=()=>permanentDelete(n.id);
 
-  const del=document.createElement("button");
-  del.textContent="মুছুন";
-  del.className="danger";
-  del.onclick=()=>deleteNote(n.id);
+   actions.append(restore,permanent);
+  }else{
+   const pin=document.createElement("button");
+   pin.textContent=n.is_pinned ? "📌 আনপিন" : "📌 পিন";
+   pin.className="secondary";
+   pin.onclick=()=>togglePin(n.id,n.is_pinned);
 
-  actions.append(pin,edit,del);
+   const edit=document.createElement("button");
+   edit.textContent="এডিট";
+   edit.onclick=()=>editNote(n.id);
+
+   const del=document.createElement("button");
+   del.textContent="🗑️ মুছুন";
+   del.className="danger";
+   del.onclick=()=>deleteNote(n.id);
+
+   actions.append(pin,edit,del);
+  }
+
   div.append(h,p,small,actions);
   box.append(div);
  });
 }
 
 async function togglePin(id,isPinned){
-
  const {error}=await db.from("notes")
  .update({is_pinned:!isPinned})
  .eq("id",id)
- .eq("user_id",currentUser.id);
+ .eq("user_id",currentUser.id)
+ .is("deleted_at",null);
 
  if(error){
-  saveMsg.textContent="পিন করতে সমস্যা: "+error.message;
+  $("saveMsg").textContent="পিন করতে সমস্যা: "+error.message;
   return;
  }
 
  await syncNotes();
- saveMsg.textContent="নোটের পিন পরিবর্তন হয়েছে।";
+ $("saveMsg").textContent="পিন পরিবর্তন হয়েছে।";
 }
 
 function editNote(id){
-
- const n=allNotes.find(x=>x.id===id);
+ const n=allNotes.find(x=>x.id===id && !x.deleted_at);
  if(!n)return;
 
- title.value=n.title || "";
- content.value=n.content || "";
- category.value=n.category || "ব্যক্তিগত";
- noteColor.value=n.color || "#ffffff";
+ $("title").value=n.title || "";
+ $("content").value=n.content || "";
+ $("category").value=n.category || "ব্যক্তিগত";
+ $("noteColor").value=n.color || "#ffffff";
 
  editingId=id;
- cancelEdit.classList.remove("hidden");
-
+ $("cancelEdit").classList.remove("hidden");
  window.scrollTo({top:0,behavior:"smooth"});
 }
 
-function cancelEditing(){
- editingId=null;
- title.value="";
- content.value="";
- category.value="ব্যক্তিগত";
- noteColor.value="#ffffff";
- cancelEdit.classList.add("hidden");
- saveMsg.textContent="এডিট বাতিল হয়েছে।";
+async function deleteNote(id){
+ if(!confirm("নোটটি Trash-এ পাঠাবেন?"))return;
+
+ const {error}=await db.from("notes")
+ .update({deleted_at:new Date().toISOString()})
+ .eq("id",id)
+ .eq("user_id",currentUser.id)
+ .is("deleted_at",null);
+
+ if(error){
+  $("saveMsg").textContent="মুছতে সমস্যা: "+error.message;
+  return;
+ }
+
+ await syncNotes();
+ $("saveMsg").textContent="নোট Trash-এ পাঠানো হয়েছে।";
 }
 
-async function deleteNote(id){
+async function restoreNote(id){
+ const {error}=await db.from("notes")
+ .update({deleted_at:null})
+ .eq("id",id)
+ .eq("user_id",currentUser.id);
 
- if(!confirm("এই নোটটি মুছে ফেলবেন?"))return;
+ if(error){
+  $("saveMsg").textContent="Restore করতে সমস্যা: "+error.message;
+  return;
+ }
+
+ await syncNotes();
+ $("saveMsg").textContent="নোট ফিরিয়ে আনা হয়েছে। ♻️";
+}
+
+async function permanentDelete(id){
+ if(!confirm("এই নোটটি চিরতরে মুছে ফেলবেন? এটি আর ফিরিয়ে আনা যাবে না।"))return;
 
  const {error}=await db.from("notes")
  .delete()
@@ -313,11 +385,12 @@ async function deleteNote(id){
  .eq("user_id",currentUser.id);
 
  if(error){
-  saveMsg.textContent="মুছতে সমস্যা হয়েছে: "+error.message;
+  $("saveMsg").textContent="স্থায়ীভাবে মুছতে সমস্যা: "+error.message;
   return;
  }
 
  await syncNotes();
+ $("saveMsg").textContent="নোট স্থায়ীভাবে মুছে ফেলা হয়েছে।";
 }
 
 db.auth.getSession().then(({data})=>{
@@ -327,4 +400,3 @@ db.auth.getSession().then(({data})=>{
 
 </body>
 </html>
-
