@@ -314,7 +314,63 @@ function showTrash(){
 function clearSearch(){
  $("search").value="";
 }
+async function loadNoteAttachments(noteId, card){
+ const area=document.createElement("div");
+ area.className="note-attachments";
+ area.textContent="📎 সংযুক্ত ফাইল লোড হচ্ছে...";
+ card.append(area);
 
+ const {data,error}=await db
+ .from("note_attachments")
+ .select("*")
+ .eq("note_id",noteId)
+ .eq("user_id",currentUser.id);
+
+ if(error){
+  area.textContent="ফাইল লোড করা যায়নি।";
+  return;
+ }
+
+ area.innerHTML="";
+
+ if(!data || !data.length){
+  area.remove();
+  return;
+ }
+
+ for(const file of data){
+  const {data:urlData,error:urlError}=await db.storage
+   .from("note-attachments")
+   .createSignedUrl(file.file_path,3600);
+
+  if(urlError || !urlData){
+   const p=document.createElement("p");
+   p.textContent="ফাইল খোলা যায়নি: "+file.file_name;
+   area.append(p);
+   continue;
+  }
+
+  if(file.mime_type && file.mime_type.startsWith("image/")){
+   const img=document.createElement("img");
+   img.src=urlData.signedUrl;
+   img.alt=file.file_name;
+   img.style.maxWidth="100%";
+   img.style.maxHeight="250px";
+   img.style.display="block";
+   img.style.marginTop="10px";
+   area.append(img);
+  }
+
+  const link=document.createElement("a");
+  link.href=urlData.signedUrl;
+  link.target="_blank";
+  link.rel="noopener";
+  link.textContent="📎 "+file.file_name;
+  link.style.display="block";
+  link.style.marginTop="8px";
+  area.append(link);
+ }
+}
 function renderNotes(){
  const q=$("search").value.toLowerCase();
  const box=$("notes");
@@ -390,9 +446,12 @@ share.onclick=()=>shareNote(n);
 
 actions.append(share,pin,edit,del);
   }
+ div.append(h,p,small,actions);
+box.append(div);
 
-  div.append(h,p,small,actions);
-  box.append(div);
+if(!trashMode){
+ loadNoteAttachments(n.id,div);
+}
  });
 }
 async function shareNote(n){
