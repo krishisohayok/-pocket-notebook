@@ -78,9 +78,60 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
       maxlength="6"
       placeholder="আপনার PIN লিখুন"
     >
-    <button onclick="unlockApp()">Unlock করুন</button>
+<button onclick="unlockApp()">Unlock করুন</button>
+
+<button class="secondary" onclick="showPinRecovery()">
+  PIN ভুলে গেছেন?
+</button>
+
+</div>
+<div id="pinRecoveryBox" class="hidden">
+  <h4>🔐 PIN পুনরুদ্ধার</h4>
+
+  <p id="recoveryEmail"></p>
+
+  <button onclick="sendPinRecoveryOtp()">
+    ইমেইলে OTP পাঠান
+  </button>
+
+  <input
+    id="recoveryOtp"
+    type="text"
+    inputmode="numeric"
+    maxlength="8"
+    placeholder="৮ সংখ্যার OTP লিখুন"
+  >
+
+  <button onclick="verifyPinRecoveryOtp()">
+    OTP যাচাই করুন
+  </button>
+
+  <div id="recoveryNewPinBox" class="hidden">
+    <input
+      id="recoveryNewPin"
+      type="password"
+      inputmode="numeric"
+      maxlength="6"
+      placeholder="নতুন ৬ সংখ্যার PIN"
+    >
+
+    <input
+      id="recoveryConfirmPin"
+      type="password"
+      inputmode="numeric"
+      maxlength="6"
+      placeholder="আবার নতুন PIN লিখুন"
+    >
+
+    <button onclick="resetPinAfterRecovery()">
+      নতুন PIN সংরক্ষণ করুন
+    </button>
   </div>
 
+  <button class="secondary" onclick="hidePinRecovery()">
+    ফিরে যান
+  </button>
+</div>
 <button class="secondary" onclick="togglePinChange()">
   PIN পরিবর্তন করুন
 </button>
@@ -1310,6 +1361,156 @@ async function importBackup(event){
 }
   
  
+let pocketPinRecoveryVerified = false;
+
+function showPinRecovery(){
+ pocketPinRecoveryVerified = false;
+
+ $("pinUnlock").classList.add("hidden");
+ $("pinChangeBox").classList.add("hidden");
+ $("pinRecoveryBox").classList.remove("hidden");
+
+ $("recoveryEmail").textContent =
+  "OTP পাঠানো হবে: " + (currentUser.email || "");
+
+ $("recoveryOtp").value = "";
+ $("recoveryNewPin").value = "";
+ $("recoveryConfirmPin").value = "";
+
+ $("recoveryNewPinBox").classList.add("hidden");
+ $("pinMsg").textContent = "";
+}
+
+function hidePinRecovery(){
+ pocketPinRecoveryVerified = false;
+
+ $("pinRecoveryBox").classList.add("hidden");
+ $("pinUnlock").classList.remove("hidden");
+
+ $("recoveryOtp").value = "";
+ $("recoveryNewPin").value = "";
+ $("recoveryConfirmPin").value = "";
+
+ $("recoveryNewPinBox").classList.add("hidden");
+ $("pinMsg").textContent = "";
+}
+
+async function sendPinRecoveryOtp(){
+ if(!currentUser || !currentUser.email){
+  $("pinMsg").textContent = "লগইন তথ্য পাওয়া যায়নি।";
+  return;
+ }
+
+ try{
+  const {error} = await db.auth.signInWithOtp({
+   email: currentUser.email,
+   options: {
+    shouldCreateUser: false
+   }
+  });
+
+  if(error){
+   $("pinMsg").textContent = "OTP পাঠানো যায়নি: " + error.message;
+   return;
+  }
+
+  $("pinMsg").textContent =
+   "আপনার ইমেইলে OTP পাঠানো হয়েছে। ইনবক্স দেখুন।";
+
+ }catch(error){
+  $("pinMsg").textContent = "সমস্যা হয়েছে: " + error.message;
+ }
+}
+
+async function verifyPinRecoveryOtp(){
+ const token = $("recoveryOtp").value.trim();
+
+ if(!/^[0-9]{8}$/.test(token)){
+  $("pinMsg").textContent = "সঠিক ৮ সংখ্যার OTP লিখুন।";
+  return;
+ }
+
+ try{
+  const {data,error} = await db.auth.verifyOtp({
+   email: currentUser.email,
+   token: token,
+   type: "email"
+  });
+
+  if(error){
+   $("pinMsg").textContent = "OTP যাচাই হয়নি: " + error.message;
+   return;
+  }
+
+  if(!data.user || data.user.id !== currentUser.id){
+   $("pinMsg").textContent = "অ্যাকাউন্ট যাচাই করা যায়নি।";
+   return;
+  }
+
+  currentUser = data.user;
+  pocketPinRecoveryVerified = true;
+
+  $("recoveryNewPinBox").classList.remove("hidden");
+  $("pinMsg").textContent =
+   "OTP সফলভাবে যাচাই হয়েছে। এবার নতুন PIN দিন।";
+
+ }catch(error){
+  $("pinMsg").textContent = "যাচাই করতে সমস্যা: " + error.message;
+ }
+}
+
+async function resetPinAfterRecovery(){
+ if(!pocketPinRecoveryVerified){
+  $("pinMsg").textContent = "আগে OTP যাচাই করুন।";
+  return;
+ }
+
+ const newPin = $("recoveryNewPin").value;
+ const confirmPin = $("recoveryConfirmPin").value;
+
+ if(!/^[0-9]{6}$/.test(newPin)){
+  $("pinMsg").textContent = "নতুন ৬ সংখ্যার PIN দিন।";
+  return;
+ }
+
+ if(newPin !== confirmPin){
+  $("pinMsg").textContent = "নতুন PIN দুটি মিলছে না।";
+  return;
+ }
+
+ try{
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await makePinHash(newPin,salt);
+
+  localStorage.setItem(
+   pinStorageKey(currentUser.id),
+   JSON.stringify({
+    salt: btoa(String.fromCharCode(...salt)),
+    hash: hash
+   })
+  );
+
+  pocketPinRecoveryVerified = false;
+
+  $("pinRecoveryBox").classList.add("hidden");
+  $("pinUnlock").classList.remove("hidden");
+  $("recoveryNewPinBox").classList.add("hidden");
+
+  $("unlockPin").value = "";
+  $("recoveryOtp").value = "";
+  $("recoveryNewPin").value = "";
+  $("recoveryConfirmPin").value = "";
+
+  $("lockMessage").textContent = "আপনার নতুন PIN লিখুন";
+  $("pinMsg").textContent =
+   "নতুন PIN সফলভাবে সংরক্ষিত হয়েছে। নতুন PIN দিয়ে Unlock করুন।";
+
+ }catch(error){
+  $("pinMsg").textContent =
+   "নতুন PIN সংরক্ষণ করা যায়নি: " + error.message;
+ }
+    }
+  
 db.auth.getSession().then(({data})=>{
  if(data.session) startApp(data.session.user);
 });
