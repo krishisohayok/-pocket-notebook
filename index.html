@@ -315,10 +315,11 @@ function clearSearch(){
  $("search").value="";
 }
 
+
 async function loadNoteAttachments(noteId, card){
  const area=document.createElement("div");
  area.className="note-attachments";
- area.textContent="📎 সংযুক্ত ফাইল লোড হচ্ছে...";
+ area.textContent="📎 ফাইল লোড হচ্ছে...";
  card.append(area);
 
  const {data,error}=await db
@@ -351,30 +352,69 @@ async function loadNoteAttachments(noteId, card){
    continue;
   }
 
+  const section=document.createElement("div");
+  section.style.marginTop="15px";
+  section.style.padding="10px";
+  section.style.border="1px solid #ddd";
+  section.style.borderRadius="10px";
+
+  const name=document.createElement("p");
+  name.textContent="📎 "+file.file_name;
+  name.style.fontWeight="bold";
+  section.append(name);
+
   if(file.mime_type && file.mime_type.startsWith("image/")){
    const img=document.createElement("img");
    img.src=urlData.signedUrl;
    img.alt=file.file_name;
    img.style.maxWidth="100%";
    img.style.maxHeight="250px";
+   img.style.objectFit="contain";
    img.style.display="block";
-   img.style.marginTop="10px";
-   area.append(img);
+   section.append(img);
   }
 
-  const link=document.createElement("a");
-  link.href=urlData.signedUrl;
-  link.target="_blank";
-  link.rel="noopener";
-  link.textContent="📎 "+file.file_name;
-  link.style.display="inline-block";
-  link.style.marginTop="8px";
-  area.append(link);
+  if(file.mime_type==="application/pdf"){
+   const preview=document.createElement("iframe");
+   preview.src=urlData.signedUrl;
+   preview.style.width="100%";
+   preview.style.height="300px";
+   preview.style.border="none";
+   preview.title=file.file_name;
+   section.append(preview);
+  }
+
+  const open=document.createElement("a");
+  open.href=urlData.signedUrl;
+  open.target="_blank";
+  open.rel="noopener";
+  open.textContent="👁️ ফাইল খুলুন";
+  open.style.marginRight="12px";
+  section.append(open);
+
+  const download=document.createElement("a");
+  download.textContent="⬇️ Download";
+  download.style.marginRight="12px";
+
+  const {data:downloadData,error:downloadError}=await db.storage
+   .from("note-attachments")
+   .createSignedUrl(file.file_path,3600,{
+    download:file.file_name
+   });
+
+  if(!downloadError && downloadData){
+   download.href=downloadData.signedUrl;
+   download.target="_blank";
+   download.rel="noopener";
+  }
+
+  section.append(download);
 
   const del=document.createElement("button");
   del.type="button";
   del.textContent="🗑️ মুছুন";
   del.style.margin="8px";
+
   del.onclick=async()=>{
    if(!confirm("এই ফাইলটি কি সত্যিই মুছতে চান?")) return;
 
@@ -408,10 +448,11 @@ async function loadNoteAttachments(noteId, card){
    await loadNoteAttachments(noteId,card);
   };
 
-  area.append(del);
+  section.append(del);
+  area.append(section);
  }
 }
-
+  
 function renderNotes(){
  const q=$("search").value.toLowerCase();
  const box=$("notes");
