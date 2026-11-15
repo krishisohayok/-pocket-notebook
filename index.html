@@ -314,6 +314,7 @@ function showTrash(){
 function clearSearch(){
  $("search").value="";
 }
+
 async function loadNoteAttachments(noteId, card){
  const area=document.createElement("div");
  area.className="note-attachments";
@@ -321,10 +322,10 @@ async function loadNoteAttachments(noteId, card){
  card.append(area);
 
  const {data,error}=await db
- .from("note_attachments")
- .select("*")
- .eq("note_id",noteId)
- .eq("user_id",currentUser.id);
+  .from("note_attachments")
+  .select("*")
+  .eq("note_id",noteId)
+  .eq("user_id",currentUser.id);
 
  if(error){
   area.textContent="ফাইল লোড করা যায়নি।";
@@ -366,11 +367,51 @@ async function loadNoteAttachments(noteId, card){
   link.target="_blank";
   link.rel="noopener";
   link.textContent="📎 "+file.file_name;
-  link.style.display="block";
+  link.style.display="inline-block";
   link.style.marginTop="8px";
   area.append(link);
+
+  const del=document.createElement("button");
+  del.type="button";
+  del.textContent="🗑️ মুছুন";
+  del.style.margin="8px";
+  del.onclick=async()=>{
+   if(!confirm("এই ফাইলটি কি সত্যিই মুছতে চান?")) return;
+
+   del.disabled=true;
+   del.textContent="মুছে ফেলা হচ্ছে...";
+
+   const {error:storageError}=await db.storage
+    .from("note-attachments")
+    .remove([file.file_path]);
+
+   if(storageError){
+    alert("Storage থেকে ফাইল মোছা যায়নি।");
+    del.disabled=false;
+    del.textContent="🗑️ মুছুন";
+    return;
+   }
+
+   const {error:dbError}=await db
+    .from("note_attachments")
+    .delete()
+    .eq("note_id",noteId)
+    .eq("user_id",currentUser.id)
+    .eq("file_path",file.file_path);
+
+   if(dbError){
+    alert("ফাইল মুছে গেছে, কিন্তু রেকর্ড মুছতে সমস্যা হয়েছে।");
+    return;
+   }
+
+   alert("ফাইল সফলভাবে মুছে ফেলা হয়েছে!");
+   await loadNoteAttachments(noteId,card);
+  };
+
+  area.append(del);
  }
 }
+
 function renderNotes(){
  const q=$("search").value.toLowerCase();
  const box=$("notes");
