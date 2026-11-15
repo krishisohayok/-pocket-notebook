@@ -81,6 +81,46 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
     <button onclick="unlockApp()">Unlock করুন</button>
   </div>
 
+<button class="secondary" onclick="togglePinChange()">
+  PIN পরিবর্তন করুন
+</button>
+
+<div id="pinChangeBox" class="hidden">
+  <h4>🔐 নতুন PIN সেট করুন</h4>
+
+  <input
+    id="oldPin"
+    type="password"
+    inputmode="numeric"
+    maxlength="6"
+    placeholder="পুরোনো PIN লিখুন"
+  >
+
+  <input
+    id="changeNewPin"
+    type="password"
+    inputmode="numeric"
+    maxlength="6"
+    placeholder="নতুন ৬ সংখ্যার PIN"
+  >
+
+  <input
+    id="changeConfirmPin"
+    type="password"
+    inputmode="numeric"
+    maxlength="6"
+    placeholder="নতুন PIN আবার লিখুন"
+  >
+
+  <button onclick="changeAppPin()">
+    নতুন PIN সংরক্ষণ করুন
+  </button>
+
+  <button class="secondary" onclick="togglePinChange()">
+    বাতিল
+  </button>
+</div>
+  
   <p id="pinMsg" class="small"></p>
   <button class="secondary" onclick="signOut()">লগআউট</button>
 </section>
@@ -380,6 +420,95 @@ async function unlockApp(){
  }
 }
 
+function togglePinChange(){
+
+ const box=$("pinChangeBox");
+
+ box.classList.toggle("hidden");
+
+ $("oldPin").value="";
+ $("changeNewPin").value="";
+ $("changeConfirmPin").value="";
+ $("pinMsg").textContent="";
+}
+
+
+async function changeAppPin(){
+
+ const oldPin=$("oldPin").value;
+ const newPin=$("changeNewPin").value;
+ const confirmPin=$("changeConfirmPin").value;
+
+ if(!/^[0-9]{6}$/.test(oldPin)){
+  $("pinMsg").textContent="পুরোনো ৬ সংখ্যার PIN দিন।";
+  return;
+ }
+
+ if(!/^[0-9]{6}$/.test(newPin)){
+  $("pinMsg").textContent="নতুন ৬ সংখ্যার PIN দিন।";
+  return;
+ }
+
+ if(newPin!==confirmPin){
+  $("pinMsg").textContent="নতুন PIN দুটি মিলছে না।";
+  return;
+ }
+
+ if(oldPin===newPin){
+  $("pinMsg").textContent="নতুন PIN পুরোনো PIN থেকে আলাদা দিন।";
+  return;
+ }
+
+ try{
+
+  const saved=JSON.parse(
+   localStorage.getItem(pinStorageKey(currentUser.id))
+  );
+
+  if(!saved){
+   $("pinMsg").textContent="পুরোনো PIN তথ্য পাওয়া যায়নি।";
+   return;
+  }
+
+  const oldSalt=Uint8Array.from(
+   atob(saved.salt),
+   c=>c.charCodeAt(0)
+  );
+
+  const oldHash=await makePinHash(oldPin,oldSalt);
+
+  if(oldHash!==saved.hash){
+   $("pinMsg").textContent="পুরোনো PIN ভুল হয়েছে।";
+   return;
+  }
+
+  const newSalt=crypto.getRandomValues(
+   new Uint8Array(16)
+  );
+
+  const newHash=await makePinHash(newPin,newSalt);
+
+  localStorage.setItem(
+   pinStorageKey(currentUser.id),
+   JSON.stringify({
+    salt:btoa(String.fromCharCode(...newSalt)),
+    hash:newHash
+   })
+  );
+
+  $("pinMsg").textContent="নতুন PIN সফলভাবে পরিবর্তন হয়েছে!";
+
+  $("oldPin").value="";
+  $("changeNewPin").value="";
+  $("changeConfirmPin").value="";
+
+  $("pinChangeBox").classList.add("hidden");
+
+ }catch(error){
+  $("pinMsg").textContent="PIN পরিবর্তন করা যায়নি। আবার চেষ্টা করুন।";
+ }
+}
+  
 async function signOut(){
 if(pocketAutoLockTimer){
  clearTimeout(pocketAutoLockTimer);
