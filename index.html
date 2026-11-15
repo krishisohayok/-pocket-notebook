@@ -170,10 +170,24 @@ async function startApp(user){
 }
 
 async function syncNotes(){
+
+ if(!currentUser) return;
+
+ const userId=currentUser.id;
+
+ // পুরোনো অ্যাকাউন্টের নোট পরিষ্কার
+ allNotes=[];
+ renderNotes();
+
  const {data,error}=await db.from("notes")
- .select("*")
- .eq("user_id",currentUser.id)
- .order("created_at",{ascending:false});
+  .select("*")
+  .eq("user_id",userId)
+  .order("created_at",{ascending:false});
+
+ // এর মধ্যে অ্যাকাউন্ট পরিবর্তন হলে
+ if(!currentUser || currentUser.id!==userId){
+  return;
+ }
 
  if(error){
   $("saveMsg").textContent="ক্লাউড সমস্যা: "+error.message;
@@ -183,8 +197,6 @@ async function syncNotes(){
  allNotes=data || [];
  renderNotes();
 }
-
-
 async function saveNote(){
  const titleValue=$("title").value.trim();
  const contentValue=$("content").value.trim();
