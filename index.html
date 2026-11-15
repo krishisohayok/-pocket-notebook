@@ -48,6 +48,43 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <p id="authMsg" class="small"></p>
 </section>
 
+<section id="appLock" class="card hidden">
+  <h3>🔐 Pocket Notebook Lock</h3>
+  <p id="lockMessage">আপনার PIN সেট করুন</p>
+
+  <div id="pinSetup">
+    <input
+      id="newPin"
+      type="password"
+      inputmode="numeric"
+      maxlength="6"
+      placeholder="৬ সংখ্যার PIN"
+    >
+    <input
+      id="confirmPin"
+      type="password"
+      inputmode="numeric"
+      maxlength="6"
+      placeholder="আবার PIN লিখুন"
+    >
+    <button onclick="setAppPin()">PIN সংরক্ষণ করুন</button>
+  </div>
+
+  <div id="pinUnlock" class="hidden">
+    <input
+      id="unlockPin"
+      type="password"
+      inputmode="numeric"
+      maxlength="6"
+      placeholder="আপনার PIN লিখুন"
+    >
+    <button onclick="unlockApp()">Unlock করুন</button>
+  </div>
+
+  <p id="pinMsg" class="small"></p>
+  <button class="secondary" onclick="signOut()">লগআউট</button>
+</section>
+  
 <section id="app" class="hidden">
 
 <div class="card">
@@ -153,22 +190,179 @@ async function signIn(){
  if(data.session) await startApp(data.session.user);
 }
 
+
+function pinStorageKey(userId){
+ return "pocket_pin_" + userId;
+}
+
+async function makePinHash(pin,salt){
+ const key=await crypto.subtle.importKey(
+  "raw",
+  new TextEncoder().encode(pin),
+  "PBKDF2",
+  false,
+  ["deriveBits"]
+ );
+
+ const bits=await crypto.subtle.deriveBits({
+  name:"PBKDF2",
+  salt:salt,
+  iterations:150000,
+  hash:"SHA-256"
+ },key,256);
+
+ return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+
+function pinStorageKey(userId){
+ return "pocket_pin_" + userId;
+}
+
+async function makePinHash(pin,salt){
+ const key=await crypto.subtle.importKey(
+  "raw",
+  new TextEncoder().encode(pin),
+  "PBKDF2",
+  false,
+  ["deriveBits"]
+ );
+
+ const bits=await crypto.subtle.deriveBits({
+  name:"PBKDF2",
+  salt:salt,
+  iterations:150000,
+  hash:"SHA-256"
+ },key,256);
+
+ return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+  
+async function enterNotebook(){
+ $("appLock").classList.add("hidden");
+ $("app").classList.remove("hidden");
+ await syncNotes();
+}
+
+async function setAppPin(){
+ const pin=$("newPin").value;
+ const confirm=$("confirmPin").value;
+
+ if(!/^[0-9]{6}$/.test(pin)){
+  $("pinMsg").textContent="৬ সংখ্যার PIN দিন।";
+  return;
+ }
+
+ if(pin!==confirm){
+  $("pinMsg").textContent="দুটি PIN মিলছে না।";
+  return;
+ }
+
+ try{
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const hash=await makePinHash(pin,salt);
+
+  localStorage.setItem(
+   pinStorageKey(currentUser.id),
+   JSON.stringify({
+    salt:btoa(String.fromCharCode(...salt)),
+    hash:hash
+   })
+  );
+
+  $("pinMsg").textContent="PIN সফলভাবে সংরক্ষিত!";
+  await enterNotebook();
+
+ }catch(error){
+  $("pinMsg").textContent="PIN সংরক্ষণ করা যায়নি।";
+ }
+}
+
+async function unlockApp(){
+ const pin=$("unlockPin").value;
+
+ if(!/^[0-9]{6}$/.test(pin)){
+  $("pinMsg").textContent="সঠিক ৬ সংখ্যার PIN দিন।";
+  return;
+ }
+
+ try{
+  const saved=JSON.parse(
+   localStorage.getItem(pinStorageKey(currentUser.id))
+  );
+
+  if(!saved){
+   $("pinMsg").textContent="PIN তথ্য পাওয়া যায়নি।";
+   return;
+  }
+
+  const salt=Uint8Array.from(
+   atob(saved.salt),
+   c=>c.charCodeAt(0)
+  );
+
+  const hash=await makePinHash(pin,salt);
+
+  if(hash!==saved.hash){
+   $("pinMsg").textContent="ভুল PIN! আবার চেষ্টা করুন।";
+   $("unlockPin").value="";
+   return;
+  }
+
+  $("pinMsg").textContent="";
+  await enterNotebook();
+
+ }catch(error){
+  $("pinMsg").textContent="PIN যাচাই করা যায়নি।";
+ }
+}
+
 async function signOut(){
  await db.auth.signOut();
+
  currentUser=null;
  allNotes=[];
+
  $("app").classList.add("hidden");
+ $("appLock").classList.add("hidden");
  $("auth").classList.remove("hidden");
+
+ $("newPin").value="";
+ $("confirmPin").value="";
+ $("unlockPin").value="";
+ $("pinMsg").textContent="";
 }
 
 async function startApp(user){
  currentUser=user;
- $("auth").classList.add("hidden");
- $("app").classList.remove("hidden");
- $("userInfo").textContent="লগইন: "+user.email;
- await syncNotes();
-}
 
+ allNotes=[];
+
+ $("auth").classList.add("hidden");
+ $("app").classList.add("hidden");
+ $("appLock").classList.remove("hidden");
+
+ $("userInfo").textContent="লগইন: "+user.email;
+
+ $("newPin").value="";
+ $("confirmPin").value="";
+ $("unlockPin").value="";
+ $("pinMsg").textContent="";
+
+ const saved=localStorage.getItem(
+  pinStorageKey(user.id)
+ );
+
+ if(saved){
+  $("lockMessage").textContent="আপনার PIN লিখুন";
+  $("pinSetup").classList.add("hidden");
+  $("pinUnlock").classList.remove("hidden");
+ }else{
+  $("lockMessage").textContent="আপনার ৬ সংখ্যার PIN সেট করুন";
+  $("pinSetup").classList.remove("hidden");
+  $("pinUnlock").classList.add("hidden");
+ }
+}
+  
 async function syncNotes(){
 
  if(!currentUser) return;
