@@ -237,10 +237,75 @@ async function makePinHash(pin,salt){
  return btoa(String.fromCharCode(...new Uint8Array(bits)));
 }
   
+let pocketAutoLockTimer = null;
+let pocketAutoLockEventsReady = false;
+
+function resetPocketAutoLockTimer(){
+
+ if(pocketAutoLockTimer){
+  clearTimeout(pocketAutoLockTimer);
+ }
+
+ if(!currentUser || $("app").classList.contains("hidden")){
+  return;
+ }
+
+ pocketAutoLockTimer = setTimeout(()=>{
+  lockPocketNotebook();
+ }, 5 * 60 * 1000);
+}
+
+function lockPocketNotebook(){
+
+ if(!currentUser || $("app").classList.contains("hidden")){
+  return;
+ }
+
+ if(pocketAutoLockTimer){
+  clearTimeout(pocketAutoLockTimer);
+  pocketAutoLockTimer=null;
+ }
+
+ allNotes=[];
+
+ $("app").classList.add("hidden");
+ $("appLock").classList.remove("hidden");
+
+ $("lockMessage").textContent=
+  "৫ মিনিট নিষ্ক্রিয় থাকার কারণে অ্যাপ লক হয়েছে";
+
+ $("pinSetup").classList.add("hidden");
+ $("pinUnlock").classList.remove("hidden");
+
+ $("unlockPin").value="";
+ $("pinMsg").textContent="আবার খুলতে আপনার PIN দিন।";
+}
+
+function setupPocketAutoLock(){
+
+ if(pocketAutoLockEventsReady) return;
+
+ ["pointerdown","keydown","touchstart","scroll"].forEach(eventName=>{
+  document.addEventListener(
+   eventName,
+   resetPocketAutoLockTimer,
+   {passive:true}
+  );
+ });
+
+ pocketAutoLockEventsReady=true;
+}
+  
+
+
 async function enterNotebook(){
  $("appLock").classList.add("hidden");
  $("app").classList.remove("hidden");
+
  await syncNotes();
+
+ setupPocketAutoLock();
+ resetPocketAutoLockTimer();
 }
 
 async function setAppPin(){
@@ -317,6 +382,10 @@ async function unlockApp(){
 }
 
 async function signOut(){
+if(pocketAutoLockTimer){
+ clearTimeout(pocketAutoLockTimer);
+ pocketAutoLockTimer=null;
+  }
  await db.auth.signOut();
 
  currentUser=null;
