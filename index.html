@@ -4,6 +4,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2457c5">
+<link rel="manifest" href="./manifest.json">
 <title>Pocket Notebook</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -180,6 +182,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 
 <div class="card">
 <p id="userInfo"></p>
+<p id="networkStatus" class="small">ইন্টারনেট সংযোগ যাচাই হচ্ছে...</p>
 <button class="secondary" onclick="signOut()">লগআউট</button>
 
 <h3>নতুন নোট লিখুন</h3>
@@ -305,29 +308,6 @@ async function makePinHash(pin,salt){
  return btoa(String.fromCharCode(...new Uint8Array(bits)));
 }
 
-function pinStorageKey(userId){
- return "pocket_pin_" + userId;
-}
-
-async function makePinHash(pin,salt){
- const key=await crypto.subtle.importKey(
-  "raw",
-  new TextEncoder().encode(pin),
-  "PBKDF2",
-  false,
-  ["deriveBits"]
- );
-
- const bits=await crypto.subtle.deriveBits({
-  name:"PBKDF2",
-  salt:salt,
-  iterations:150000,
-  hash:"SHA-256"
- },key,256);
-
- return btoa(String.fromCharCode(...new Uint8Array(bits)));
-}
-  
 let pocketAutoLockTimer = null;
 let pocketAutoLockEventsReady = false;
 
@@ -389,6 +369,7 @@ function setupPocketAutoLock(){
 
 
 async function enterNotebook(){
+ updateNetworkStatus();
  $("appLock").classList.add("hidden");
  $("app").classList.remove("hidden");
 
@@ -611,35 +592,145 @@ async function startApp(user){
  }
 }
   
+
+function offlineStoreKey(userId){
+ return "pocket_offline_" + userId;
+}
+function readOfflineStore(){
+ if(!currentUser) return {notes:[],pendingCreates:[],pendingUpdates:{},pendingDeletes:[]};
+ try{
+  return JSON.parse(localStorage.getItem(offlineStoreKey(currentUser.id))) ||
+   {notes:[],pendingCreates:[],pendingUpdates:{},pendingDeletes:[]};
+ }catch(error){
+  return {notes:[],pendingCreates:[],pendingUpdates:{},pendingDeletes:[]};
+ }
+}
+function writeOfflineStore(store){
+ if(!currentUser) return;
+ try{
+  localStorage.setItem(offlineStoreKey(currentUser.id),JSON.stringify(store));
+ }catch(error){
+  $("saveMsg").textContent="অফলাইন সংরক্ষণের জায়গা পূর্ণ। কিছু নোট Backup করুন।";
+ }
+}
+function cacheOfflineNotes(){
+ if(!currentUser) return;
+ const store=readOfflineStore();
+ store.notes=allNotes;
+ writeOfflineStore(store);
+}
+function saveOfflineNote(note){
+ const store=readOfflineStore();
+ if(String(note.id).startsWith("local-")){
+  const i=store.pendingCreates.findIndex(x=>x.id===note.id);
+  if(i>=0) store.pendingCreates[i]=note;
+  else store.pendingCreates.push(note);
+ }else{
+  store.pendingUpdates[note.id]=note;
+ }
+ store.notes=allNotes;
+ writeOfflineStore(store);
+}
+
+async function syncPendingOfflineChanges(){
+ if(!currentUser || !navigator.onLine) return;
+ const store=readOfflineStore();
+ const userId=currentUser.id;
+
+ for(const note of [...(store.pendingCreates || [])]){
+  if(!currentUser || currentUser.id!==userId) return;
+  const {id,_offlinePending,created_at,updated_at,...payload}=note;
+  const {data,error}=await db.from("notes").insert(payload).select("id").single();
+  if(error){
+   $("saveMsg").textContent="অফলাইন নোট Sync হয়নি: "+error.message;
+   return;
+  }
+  store.pendingCreates=(store.pendingCreates || []).filter(x=>x.id!==id);
+  store.notes=(store.notes || []).map(x=>x.id===id?{...x,id:data.id,_offlinePending:false}:x);
+  if(store.pendingUpdates && store.pendingUpdates[id]){
+   store.pendingUpdates[data.id]=store.pendingUpdates[id];
+   delete store.pendingUpdates[id];
+  }
+  writeOfflineStore(store);
+ }
+
+ for(const [id,note] of Object.entries({...store.pendingUpdates})){
+  if(!currentUser || currentUser.id!==userId) return;
+  if(String(id).startsWith("local-")) continue;
+  const {id:ignored,_offlinePending,created_at,updated_at,...payload}=note;
+  const {error}=await db.from("notes").update(payload)
+   .eq("id",id).eq("user_id",userId);
+  if(error){
+   $("saveMsg").textContent="অফলাইন পরিবর্তন Sync হয়নি: "+error.message;
+   return;
+  }
+  delete store.pendingUpdates[id];
+  writeOfflineStore(store);
+ }
+
+ for(const id of [...(store.pendingDeletes || [])]){
+  if(!currentUser || currentUser.id!==userId) return;
+  if(String(id).startsWith("local-")) continue;
+  const {error}=await db.from("notes").delete().eq("id",id).eq("user_id",userId);
+  if(error){
+   $("saveMsg").textContent="মুছে ফেলার পরিবর্তন Sync হয়নি: "+error.message;
+   return;
+  }
+  store.pendingDeletes=store.pendingDeletes.filter(x=>x!==id);
+  writeOfflineStore(store);
+ }
+}
+window.addEventListener("online",()=>{
+ if(currentUser) syncNotes();
+});
+
 async function syncNotes(){
 
  if(!currentUser) return;
-
  const userId=currentUser.id;
-
- // পুরোনো অ্যাকাউন্টের নোট পরিষ্কার
  allNotes=[];
  renderNotes();
+
+ if(!navigator.onLine){
+  const store=readOfflineStore();
+  allNotes=store.notes || [];
+  renderNotes();
+  $("saveMsg").textContent="আপনি Offline আছেন। সংরক্ষিত লেখা নোট দেখানো হচ্ছে।";
+  return;
+ }
+
+ await syncPendingOfflineChanges();
+ if(!currentUser || currentUser.id!==userId) return;
 
  const {data,error}=await db.from("notes")
   .select("*")
   .eq("user_id",userId)
   .order("created_at",{ascending:false});
 
- // এর মধ্যে অ্যাকাউন্ট পরিবর্তন হলে
- if(!currentUser || currentUser.id!==userId){
-  return;
- }
+ if(!currentUser || currentUser.id!==userId) return;
 
  if(error){
-  $("saveMsg").textContent="ক্লাউড সমস্যা: "+error.message;
+  const store=readOfflineStore();
+  allNotes=store.notes || [];
+  renderNotes();
+  $("saveMsg").textContent="ক্লাউডে সংযোগ হয়নি। অফলাইনে থাকা নোট দেখানো হচ্ছে।";
   return;
  }
 
- allNotes=data || [];
+ const store=readOfflineStore();
+ const localPending=[...(store.pendingCreates || [])];
+ const pendingUpdates=store.pendingUpdates || {};
+ allNotes=(data || []).map(n=>pendingUpdates[n.id] || n).concat(localPending);
+ store.notes=allNotes;
+ writeOfflineStore(store);
  renderNotes();
 }
 async function saveNote(){
+ if(!currentUser){
+  $("saveMsg").textContent="আগে লগইন করুন।";
+  return;
+ }
+
  const titleValue=$("title").value.trim();
  const contentValue=$("content").value.trim();
  const files=Array.from($("noteFiles").files || []);
@@ -656,7 +747,7 @@ async function saveNote(){
   }
  }
 
- const note={
+ const noteFields={
   title:titleValue || "শিরোনামহীন নোট",
   content:contentValue,
   category:$("category").value,
@@ -664,57 +755,75 @@ async function saveNote(){
   user_id:currentUser.id
  };
 
+ // Offline: text-only notes are saved on this device and queued for cloud sync.
+ if(!navigator.onLine){
+  const now=new Date().toISOString();
+  let note;
+  if(editingId){
+   const old=allNotes.find(x=>String(x.id)===String(editingId));
+   if(!old){
+    $("saveMsg").textContent="এডিট করার নোটটি পাওয়া যায়নি। আবার Sync করুন।";
+    return;
+   }
+   note={...old,...noteFields,_offlinePending:true};
+  }else{
+   note={...noteFields,id:"local-"+Date.now()+"-"+Math.random().toString(36).slice(2),created_at:now,is_pinned:false,deleted_at:null,_offlinePending:true};
+  }
+  const index=allNotes.findIndex(x=>String(x.id)===String(note.id));
+  if(index>=0) allNotes[index]=note;
+  else allNotes.unshift(note);
+  saveOfflineNote(note);
+  clearForm();
+  $("noteFiles").value="";
+  renderNotes();
+  $("saveMsg").textContent=files.length
+   ? "লেখাটি এই ডিভাইসে Offline-এ সংরক্ষিত হয়েছে। ছবি/PDF সংযুক্ত করতে Internet চালু হলে নোটটি এডিট করে ফাইল যোগ করুন।"
+   : "লেখাটি এই ডিভাইসে Offline-এ সংরক্ষিত হয়েছে। Internet এলে নিজে থেকেই Sync হবে।";
+  return;
+ }
+
  let result;
  let noteId=editingId;
-
  if(editingId){
-  result=await db.from("notes").update(note)
-  .eq("id",editingId)
-  .eq("user_id",currentUser.id)
-  .is("deleted_at",null);
+  result=await db.from("notes").update(noteFields)
+   .eq("id",editingId).eq("user_id",currentUser.id).is("deleted_at",null);
  }else{
-  result=await db.from("notes")
-  .insert(note)
-  .select("id")
-  .single();
-
-  if(!result.error){
-   noteId=result.data.id;
-  }
+  result=await db.from("notes").insert(noteFields).select("id").single();
+  if(!result.error) noteId=result.data.id;
  }
 
  if(result.error){
-  $("saveMsg").textContent="সংরক্ষণ হয়নি: "+result.error.message;
+  // If the connection dropped during save, keep the text locally rather than losing it.
+  const now=new Date().toISOString();
+  let localNote;
+  if(editingId){
+   const old=allNotes.find(x=>String(x.id)===String(editingId));
+   localNote={...(old || {id:editingId}),...noteFields,_offlinePending:true};
+  }else{
+   localNote={...noteFields,id:"local-"+Date.now()+"-"+Math.random().toString(36).slice(2),created_at:now,is_pinned:false,deleted_at:null,_offlinePending:true};
+  }
+  const index=allNotes.findIndex(x=>String(x.id)===String(localNote.id));
+  if(index>=0) allNotes[index]=localNote; else allNotes.unshift(localNote);
+  saveOfflineNote(localNote);
+  clearForm();
+  $("noteFiles").value="";
+  renderNotes();
+  $("saveMsg").textContent="Cloud-এ সংরক্ষণ হয়নি; লেখাটি এই ডিভাইসে রাখা হয়েছে। Internet এলে Sync হবে। ছবি/PDF পরে যোগ করুন।";
   return;
  }
 
  let uploadErrors=[];
-
  for(const file of files){
   const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   const filePath=currentUser.id+"/"+noteId+"/"+Date.now()+"_"+Math.random().toString(36).slice(2)+"_"+safeName;
-
-  const upload=await db.storage
-  .from("note-attachments")
-  .upload(filePath,file,{
-   contentType:file.type || "application/octet-stream",
-   upsert:false
+  const upload=await db.storage.from("note-attachments").upload(filePath,file,{
+   contentType:file.type || "application/octet-stream",upsert:false
   });
-
-  if(upload.error){
-   uploadErrors.push(file.name+": "+upload.error.message);
-   continue;
-  }
-
+  if(upload.error){ uploadErrors.push(file.name+": "+upload.error.message); continue; }
   const saved=await db.from("note_attachments").insert({
-   note_id:noteId,
-   user_id:currentUser.id,
-   file_name:file.name,
-   file_path:filePath,
-   mime_type:file.type,
-   file_size:file.size
+   note_id:noteId,user_id:currentUser.id,file_name:file.name,file_path:filePath,
+   mime_type:file.type,file_size:file.size
   });
-
   if(saved.error){
    await db.storage.from("note-attachments").remove([filePath]);
    uploadErrors.push(file.name+": "+saved.error.message);
@@ -727,13 +836,11 @@ async function saveNote(){
   await syncNotes();
   return;
  }
-
  clearForm();
  $("noteFiles").value="";
- $("saveMsg").textContent="নোট ও ফাইল সফলভাবে সংরক্ষিত হয়েছে। 🎉";
+ $("saveMsg").textContent="নোট ও ফাইল সফলভাবে সংরক্ষণ হয়েছে। 🎉";
  await syncNotes();
 }
- 
 
 function clearForm(){
  $("title").value="";
@@ -985,7 +1092,7 @@ actions.append(share,pin,edit,del);
  div.append(h,p,small,actions);
 box.append(div);
 
-if(!trashMode){
+if(!trashMode && navigator.onLine && !String(n.id).startsWith("local-")){
  loadNoteAttachments(n.id,div);
 }
  });
@@ -1016,17 +1123,26 @@ async function shareNote(n){
  }
 }
 async function togglePin(id,isPinned){
- const {error}=await db.from("notes")
- .update({is_pinned:!isPinned})
- .eq("id",id)
- .eq("user_id",currentUser.id)
- .is("deleted_at",null);
-
- if(error){
-  $("saveMsg").textContent="পিন করতে সমস্যা: "+error.message;
+ const note=allNotes.find(x=>String(x.id)===String(id));
+ if(!note) return;
+ const updated={...note,is_pinned:!isPinned,_offlinePending:!navigator.onLine};
+ const index=allNotes.findIndex(x=>String(x.id)===String(id));
+ allNotes[index]=updated;
+ if(!navigator.onLine || String(id).startsWith("local-")){
+  saveOfflineNote(updated);
+  renderNotes();
+  $("saveMsg").textContent="পিন পরিবর্তন Offline-এ সংরক্ষিত হয়েছে; Internet এলে Sync হবে।";
   return;
  }
-
+ const {error}=await db.from("notes").update({is_pinned:!isPinned})
+  .eq("id",id).eq("user_id",currentUser.id).is("deleted_at",null);
+ if(error){
+  saveOfflineNote({...updated,_offlinePending:true});
+  $("saveMsg").textContent="Cloud-এ পিন Sync হয়নি; পরিবর্তনটি এই ডিভাইসে রাখা হয়েছে।";
+  renderNotes();
+  return;
+ }
+ cacheOfflineNotes();
  await syncNotes();
  $("saveMsg").textContent="পিন পরিবর্তন হয়েছে।";
 }
@@ -1047,54 +1163,69 @@ function editNote(id){
 
 async function deleteNote(id){
  if(!confirm("নোটটি Trash-এ পাঠাবেন?"))return;
-
- const {error}=await db.from("notes")
- .update({deleted_at:new Date().toISOString()})
- .eq("id",id)
- .eq("user_id",currentUser.id)
- .is("deleted_at",null);
-
- if(error){
-  $("saveMsg").textContent="মুছতে সমস্যা: "+error.message;
+ const note=allNotes.find(x=>String(x.id)===String(id));
+ if(!note)return;
+ const updated={...note,deleted_at:new Date().toISOString(),_offlinePending:true};
+ const index=allNotes.findIndex(x=>String(x.id)===String(id));
+ allNotes[index]=updated;
+ if(!navigator.onLine || String(id).startsWith("local-")){
+  saveOfflineNote(updated); renderNotes();
+  $("saveMsg").textContent="নোট Trash-এ পাঠানো হয়েছে; Internet এলে Sync হবে।";
   return;
  }
-
- await syncNotes();
+ const {error}=await db.from("notes").update({deleted_at:updated.deleted_at})
+  .eq("id",id).eq("user_id",currentUser.id).is("deleted_at",null);
+ if(error){ saveOfflineNote(updated); renderNotes(); $("saveMsg").textContent="Cloud-এ পরিবর্তন হয়নি; Trash-এর কাজটি এই ডিভাইসে রাখা হয়েছে।"; return; }
+ cacheOfflineNotes(); await syncNotes();
  $("saveMsg").textContent="নোট Trash-এ পাঠানো হয়েছে।";
 }
 
 async function restoreNote(id){
- const {error}=await db.from("notes")
- .update({deleted_at:null})
- .eq("id",id)
- .eq("user_id",currentUser.id);
-
- if(error){
-  $("saveMsg").textContent="Restore করতে সমস্যা: "+error.message;
+ const note=allNotes.find(x=>String(x.id)===String(id));
+ if(!note)return;
+ const updated={...note,deleted_at:null,_offlinePending:true};
+ const index=allNotes.findIndex(x=>String(x.id)===String(id));
+ allNotes[index]=updated;
+ if(!navigator.onLine || String(id).startsWith("local-")){
+  saveOfflineNote(updated); renderNotes();
+  $("saveMsg").textContent="নোট Restore হয়েছে; Internet এলে Sync হবে।";
   return;
  }
-
- await syncNotes();
+ const {error}=await db.from("notes").update({deleted_at:null})
+  .eq("id",id).eq("user_id",currentUser.id);
+ if(error){ saveOfflineNote(updated); renderNotes(); $("saveMsg").textContent="Cloud-এ Restore হয়নি; পরিবর্তনটি এই ডিভাইসে রাখা হয়েছে।"; return; }
+ cacheOfflineNotes(); await syncNotes();
  $("saveMsg").textContent="নোট ফিরিয়ে আনা হয়েছে। ♻️";
 }
 
 async function permanentDelete(id){
  if(!confirm("এই নোটটি চিরতরে মুছে ফেলবেন? এটি আর ফিরিয়ে আনা যাবে না।"))return;
-
- const {error}=await db.from("notes")
- .delete()
- .eq("id",id)
- .eq("user_id",currentUser.id);
-
- if(error){
-  $("saveMsg").textContent="স্থায়ীভাবে মুছতে সমস্যা: "+error.message;
+ const store=readOfflineStore();
+ if(String(id).startsWith("local-")){
+  store.pendingCreates=(store.pendingCreates || []).filter(x=>String(x.id)!==String(id));
+  if(store.pendingUpdates) delete store.pendingUpdates[id];
+ }else if(!navigator.onLine){
+  store.pendingDeletes=store.pendingDeletes || [];
+  if(!store.pendingDeletes.includes(id)) store.pendingDeletes.push(id);
+  if(store.pendingUpdates) delete store.pendingUpdates[id];
+ }
+ allNotes=allNotes.filter(x=>String(x.id)!==String(id));
+ store.notes=allNotes;
+ writeOfflineStore(store);
+ if(!navigator.onLine || String(id).startsWith("local-")){
+  renderNotes(); $("saveMsg").textContent="নোটটি এই ডিভাইস থেকে মুছে ফেলা হয়েছে; Internet এলে পরিবর্তন Sync হবে।";
   return;
  }
-
- await syncNotes();
- $("saveMsg").textContent="নোট স্থায়ীভাবে মুছে ফেলা হয়েছে।";
+ const {error}=await db.from("notes").delete().eq("id",id).eq("user_id",currentUser.id);
+ if(error){
+  store.pendingDeletes=store.pendingDeletes || [];
+  if(!store.pendingDeletes.includes(id)) store.pendingDeletes.push(id);
+  writeOfflineStore(store);
+  $("saveMsg").textContent="Cloud-এ মুছতে পারেনি; মুছে ফেলার অনুরোধটি Sync-এর জন্য রাখা হয়েছে।";
+  renderNotes(); return;
+ }
+ await syncNotes(); $("saveMsg").textContent="নোট স্থায়ীভাবে মুছে ফেলা হয়েছে।";
 }
-
 
 function blobToDataUrl(blob){
  return new Promise((resolve,reject)=>{
@@ -1511,6 +1642,23 @@ async function resetPinAfterRecovery(){
  }
     }
   
+function updateNetworkStatus(){
+ const el=$("networkStatus");
+ if(!el) return;
+ el.textContent=navigator.onLine
+  ? "🟢 Online — Cloud Sync চালু"
+  : "🟠 Offline — লেখা নোট এই ডিভাইসে সংরক্ষিত হবে";
+}
+window.addEventListener("online",updateNetworkStatus);
+window.addEventListener("offline",updateNetworkStatus);
+updateNetworkStatus();
+
+
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+ navigator.serviceWorker.register("./service-worker.js", {scope:"./"})
+  .catch(error => console.warn("Service Worker registration failed:", error));
+}
+
 db.auth.getSession().then(({data})=>{
  if(data.session) startApp(data.session.user);
 });
