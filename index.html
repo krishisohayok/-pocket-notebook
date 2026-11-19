@@ -188,7 +188,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <h3>নতুন নোট লিখুন</h3>
 <input id="title" placeholder="নোটের শিরোনাম">
 
-<select id="category">
+<select id="category" onchange="applyCategoryColor()">
 <option>ব্যক্তিগত</option>
 <option>কাজ</option>
 <option>পড়াশোনা</option>
@@ -752,6 +752,26 @@ async function syncNotes(){
  writeOfflineStore(store);
  renderNotes();
 }
+const categoryColors={
+ "ব্যক্তিগত":"#f9dde8",
+ "কাজ":"#fff2a8",
+ "পড়াশোনা":"#dcebff",
+ "কৃষি":"#d9f5de",
+ "অন্যান্য":"#e9dfff"
+};
+
+function getCategoryColor(category){
+ return categoryColors[category] || categoryColors["অন্যান্য"];
+}
+
+function applyCategoryColor(){
+ const colorSelect=$("noteColor");
+ const categorySelect=$("category");
+ if(colorSelect && categorySelect){
+  colorSelect.value=getCategoryColor(categorySelect.value);
+ }
+}
+
 async function saveNote(){
  if(!currentUser){
   $("saveMsg").textContent="আগে লগইন করুন।";
@@ -873,7 +893,7 @@ function clearForm(){
  $("title").value="";
  $("content").value="";
  $("category").value="ব্যক্তিগত";
- $("noteColor").value="#ffffff";
+ $("noteColor").value=getCategoryColor("ব্যক্তিগত");
  editingId=null;
  $("cancelEdit").classList.add("hidden");
 }
@@ -1148,7 +1168,19 @@ function renderNotes(){
  filtered.forEach(n=>{
   const div=document.createElement("div");
   div.className="card note";
-  div.style.backgroundColor=n.color || "#ffffff";
+  const savedColor=(n.color || "#ffffff").toLowerCase();
+  const usesDefaultWhite=savedColor==="#ffffff" || savedColor==="#fff";
+  div.style.backgroundColor=usesDefaultWhite
+   ? getCategoryColor(n.category || "অন্যান্য")
+   : n.color;
+  const categoryBorders={
+   "ব্যক্তিগত":"#d979a1",
+   "কাজ":"#d4a900",
+   "পড়াশোনা":"#5b8fd9",
+   "কৃষি":"#4a9b62",
+   "অন্যান্য":"#9670c9"
+  };
+  div.style.borderLeftColor=categoryBorders[n.category || "অন্যান্য"] || categoryBorders["অন্যান্য"];
 
   const h=document.createElement("h3");
   h.textContent=n.title || "শিরোনামহীন নোট";
