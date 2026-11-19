@@ -250,6 +250,16 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <input type="date" id="specificNoteDate" aria-label="নির্দিষ্ট তারিখ নির্বাচন" onchange="renderNotes()" style="flex:1;min-width:145px;display:none">
 </div>
 <p id="dateFilterInfo" class="small"></p>
+
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+ <label for="noteSort" class="small">↕️ নোট সাজান:</label>
+ <select id="noteSort" onchange="renderNotes()" style="flex:1;min-width:180px">
+  <option value="newest">নতুন নোট আগে</option>
+  <option value="oldest">পুরোনো নোট আগে</option>
+  <option value="title">নামের ক্রমে (A–Z)</option>
+ </select>
+</div>
+<p class="small">📌 পিন করা নোট সবসময় তালিকার উপরে থাকবে।</p>
  <h3>📥 Backup & Export</h3>
 <button onclick="exportBackup()">📥 সব নোট Backup করুন</button>
 
@@ -1090,9 +1100,24 @@ function renderNotes(){
   return true;
  });
 
- if(!trashMode){
-  filtered.sort((a,b)=>Number(!!b.is_pinned)-Number(!!a.is_pinned));
- }
+ const sortMode=$("noteSort") ? $("noteSort").value : "newest";
+ const timeValue=n=>{
+  const value=new Date(n.created_at || 0).getTime();
+  return Number.isNaN(value) ? 0 : value;
+ };
+ filtered.sort((a,b)=>{
+  // Active notes: pinned notes always stay above unpinned notes.
+  if(!trashMode){
+   const pinOrder=Number(!!b.is_pinned)-Number(!!a.is_pinned);
+   if(pinOrder) return pinOrder;
+  }
+
+  if(sortMode==="oldest") return timeValue(a)-timeValue(b);
+  if(sortMode==="title"){
+   return String(a.title || "").localeCompare(String(b.title || ""), "bn", {sensitivity:"base"});
+  }
+  return timeValue(b)-timeValue(a); // newest first by default
+ });
 
  const dateLabels={
   all:"",
