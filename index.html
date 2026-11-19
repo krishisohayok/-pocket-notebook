@@ -232,7 +232,11 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <button id="trashTab" class="secondary" onclick="showTrash()">🗑️ Trash</button>
 </div>
 
-<input id="search" placeholder="নোট খুঁজুন..." oninput="renderNotes()">
+<div style="display:flex;gap:8px;align-items:center">
+ <input id="search" style="flex:1;min-width:0" placeholder="শিরোনাম, লেখা বা ক্যাটাগরি দিয়ে খুঁজুন..." oninput="renderNotes()">
+ <button type="button" class="secondary" onclick="clearNoteSearch()">✖ মুছুন</button>
+</div>
+<p id="searchInfo" class="small"></p>
  <h3>📥 Backup & Export</h3>
 <button onclick="exportBackup()">📥 সব নোট Backup করুন</button>
 
@@ -1015,25 +1019,41 @@ async function loadNoteAttachments(noteId, card){
 }
   
 function renderNotes(){
- const q=$("search").value.toLowerCase();
+ const rawQuery=$("search").value.trim().toLocaleLowerCase();
+ const terms=rawQuery.split(/\\s+/).filter(Boolean);
  const box=$("notes");
+ const info=$("searchInfo");
  box.innerHTML="";
 
  let filtered=allNotes.filter(n=>{
   const inTrash=!!n.deleted_at;
-  return inTrash===trashMode &&
-  ((n.title || "").toLowerCase().includes(q) ||
-  (n.content || "").toLowerCase().includes(q));
+  if(inTrash!==trashMode) return false;
+
+  const searchable=[
+   n.title || "",
+   n.content || "",
+   n.category || "",
+   n.created_at || "",
+   n.is_pinned ? "পিন pinned" : ""
+  ].join(" ").toLocaleLowerCase();
+
+  return terms.every(term=>searchable.includes(term));
  });
 
  if(!trashMode){
   filtered.sort((a,b)=>Number(!!b.is_pinned)-Number(!!a.is_pinned));
  }
 
+ if(info){
+  info.textContent=rawQuery
+   ? "🔎 "+filtered.length+"টি নোট পাওয়া গেছে"
+   : "";
+ }
+
  if(!filtered.length){
-  box.innerHTML=trashMode
-  ? "<p>Trash খালি আছে।</p>"
-  : "<p>এখনও কোনো নোট নেই।</p>";
+  box.innerHTML=rawQuery
+   ? "<p>🔍 এই শব্দে কোনো নোট পাওয়া যায়নি। অন্য শব্দ দিয়ে খুঁজুন।</p>"
+   : (trashMode ? "<p>Trash খালি আছে।</p>" : "<p>এখনও কোনো নোট নেই।</p>");
   return;
  }
 
@@ -1091,19 +1111,24 @@ function renderNotes(){
    del.onclick=()=>deleteNote(n.id);
 
    const share=document.createElement("button");
-share.textContent="📤 শেয়ার";
-share.className="secondary";
-share.onclick=()=>shareNote(n);
+   share.textContent="📤 শেয়ার";
+   share.className="secondary";
+   share.onclick=()=>shareNote(n);
 
-actions.append(share,pin,edit,del);
+   actions.append(share,pin,edit,del);
   }
- div.append(h,p,small,actions);
-box.append(div);
+  div.append(h,p,small,actions);
+  box.append(div);
 
-if(!trashMode && navigator.onLine && !String(n.id).startsWith("local-")){
- loadNoteAttachments(n.id,div);
-}
+  if(!trashMode && navigator.onLine && !String(n.id).startsWith("local-")){
+   loadNoteAttachments(n.id,div);
+  }
  });
+}
+
+function clearNoteSearch(){
+ $("search").value="";
+ renderNotes();
 }
 async function shareNote(n){
 
