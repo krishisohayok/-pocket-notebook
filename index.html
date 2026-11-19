@@ -1050,7 +1050,15 @@ function renderNotes(){
 
   const small=document.createElement("p");
   small.className="small";
-  small.textContent=(n.is_pinned ? "📌 পিন করা • " : "")+(n.category || "অন্যান্য");
+  const noteDate = n.created_at
+   ? new Date(n.created_at).toLocaleString("bn-BD",{
+      day:"numeric",month:"short",year:"numeric",
+      hour:"numeric",minute:"2-digit"
+     })
+   : "";
+  small.textContent=(n.is_pinned ? "📌 পিন করা • " : "")+
+   (n.category || "অন্যান্য")+
+   (noteDate ? " • 🕒 "+noteDate : "");
 
   const actions=document.createElement("div");
   actions.className="actions";
