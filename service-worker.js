@@ -4,8 +4,8 @@ const APP_FILES = [
   new URL("./", APP_SCOPE).href,
   new URL("./index.html", APP_SCOPE).href,
   new URL("./manifest.json", APP_SCOPE).href,
-  new URL("./icons/pocket-notebook-192.png", APP_SCOPE).href,
-  new URL("./icons/pocket-notebook-512.png", APP_SCOPE).href
+  new URL("./pocket-notebook-192.png", APP_SCOPE).href,
+  new URL("./pocket-notebook-512.png", APP_SCOPE).href
 ];
 
 self.addEventListener("install", event => {
