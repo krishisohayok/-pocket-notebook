@@ -231,6 +231,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <div class="dashboard-grid">
   <div class="dashboard-stat"><span>মোট নোট</span><strong id="dashTotal">০</strong></div>
   <div class="dashboard-stat"><span>📌 পিন করা</span><strong id="dashPinned">০</strong></div>
+  <div class="dashboard-stat"><span>⭐ Favorite</span><strong id="dashFavorites">০</strong></div>
   <div class="dashboard-stat"><span>🗑️ Trash</span><strong id="dashTrash">০</strong></div>
   <div class="dashboard-stat"><span>📅 আজকের নোট</span><strong id="dashToday">০</strong></div>
  </div>
@@ -284,6 +285,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 
 <div class="tabs">
 <button id="activeTab" onclick="showActive()">আমার নোট</button>
+<button id="favoriteTab" class="secondary" onclick="showFavorites()">⭐ Favorite</button>
 <button id="trashTab" class="secondary" onclick="showTrash()">🗑️ Trash</button>
 </div>
 
@@ -340,6 +342,7 @@ let currentUser = null;
 let allNotes = [];
 let editingId = null;
 let trashMode = false;
+let favoriteMode = false;
 
 const $ = id => document.getElementById(id);
 
@@ -921,6 +924,9 @@ async function saveNote(){
   content:contentValue,
   category:$("category").value,
   color:$("noteColor").value,
+  is_favorite:editingId
+   ? !!(allNotes.find(x=>String(x.id)===String(editingId)) || {}).is_favorite
+   : false,
   user_id:currentUser.id
  };
 
@@ -936,7 +942,7 @@ async function saveNote(){
    }
    note={...old,...noteFields,_offlinePending:true};
   }else{
-   note={...noteFields,id:"local-"+Date.now()+"-"+Math.random().toString(36).slice(2),created_at:now,is_pinned:false,deleted_at:null,_offlinePending:true};
+   note={...noteFields,id:"local-"+Date.now()+"-"+Math.random().toString(36).slice(2),created_at:now,is_pinned:false,is_favorite:false,deleted_at:null,_offlinePending:true};
   }
   const index=allNotes.findIndex(x=>String(x.id)===String(note.id));
   if(index>=0) allNotes[index]=note;
@@ -969,7 +975,7 @@ async function saveNote(){
    const old=allNotes.find(x=>String(x.id)===String(editingId));
    localNote={...(old || {id:editingId}),...noteFields,_offlinePending:true};
   }else{
-   localNote={...noteFields,id:"local-"+Date.now()+"-"+Math.random().toString(36).slice(2),created_at:now,is_pinned:false,deleted_at:null,_offlinePending:true};
+   localNote={...noteFields,id:"local-"+Date.now()+"-"+Math.random().toString(36).slice(2),created_at:now,is_pinned:false,is_favorite:false,deleted_at:null,_offlinePending:true};
   }
   const index=allNotes.findIndex(x=>String(x.id)===String(localNote.id));
   if(index>=0) allNotes[index]=localNote; else allNotes.unshift(localNote);
@@ -1025,18 +1031,32 @@ function cancelEditing(){
  $("saveMsg").textContent="এডিট বাতিল হয়েছে।";
 }
 
+function updateNoteTabs(){
+ $("activeTab").classList.toggle("secondary",trashMode || favoriteMode);
+ $("favoriteTab").classList.toggle("secondary",!favoriteMode);
+ $("trashTab").classList.toggle("secondary",!trashMode);
+}
+
 function showActive(){
  trashMode=false;
- $("activeTab").classList.remove("secondary");
- $("trashTab").classList.add("secondary");
+ favoriteMode=false;
+ updateNoteTabs();
+ clearSearch();
+ renderNotes();
+}
+
+function showFavorites(){
+ trashMode=false;
+ favoriteMode=true;
+ updateNoteTabs();
  clearSearch();
  renderNotes();
 }
 
 function showTrash(){
  trashMode=true;
- $("trashTab").classList.remove("secondary");
- $("activeTab").classList.add("secondary");
+ favoriteMode=false;
+ updateNoteTabs();
  clearSearch();
  renderNotes();
 }
@@ -1200,6 +1220,7 @@ function renderDashboard(){
  const setCount=(id,value)=>{ const el=$(id); if(el) el.textContent=Number(value).toLocaleString("bn-BD"); };
  setCount("dashTotal",active.length);
  setCount("dashPinned",active.filter(n=>!!n.is_pinned).length);
+ setCount("dashFavorites",active.filter(n=>!!n.is_favorite).length);
  setCount("dashTrash",trashed.length);
  setCount("dashToday",active.filter(n=>noteDateKey(n.created_at)===todayKey).length);
 
@@ -1291,13 +1312,15 @@ function renderNotes(){
  let filtered=allNotes.filter(n=>{
   const inTrash=!!n.deleted_at;
   if(inTrash!==trashMode) return false;
+  if(favoriteMode && !n.is_favorite) return false;
 
   const searchable=[
    n.title || "",
    n.content || "",
    n.category || "",
    n.created_at || "",
-   n.is_pinned ? "পিন pinned" : ""
+   n.is_pinned ? "পিন pinned" : "",
+   n.is_favorite ? "প্রিয় favorite" : ""
   ].join(" ").toLocaleLowerCase();
 
   const matchesText=terms.every(term=>searchable.includes(term));
@@ -1358,7 +1381,7 @@ function renderNotes(){
  if(!filtered.length){
   box.innerHTML=(rawQuery || dateMode!=="all")
    ? "<p>🔍 এই অনুসন্ধানে কোনো নোট পাওয়া যায়নি। তারিখ বা শব্দ পরিবর্তন করে দেখুন।</p>"
-   : (trashMode ? "<p>Trash খালি আছে।</p>" : "<p>এখনও কোনো নোট নেই।</p>");
+   : (trashMode ? "<p>Trash খালি আছে।</p>" : (favoriteMode ? "<p>এখনও কোনো Favorite নোট নেই। নোটে ⭐ Favorite চাপুন।</p>" : "<p>এখনও কোনো নোট নেই।</p>"));
   return;
  }
 
@@ -1394,6 +1417,7 @@ function renderNotes(){
      })
    : "";
   small.textContent=(n.is_pinned ? "📌 পিন করা • " : "")+
+   (n.is_favorite ? "⭐ Favorite • " : "")+
    (n.category || "অন্যান্য")+
    (noteDate ? " • 🕒 "+noteDate : "");
 
@@ -1413,6 +1437,11 @@ function renderNotes(){
 
    actions.append(restore,permanent);
   }else{
+   const favorite=document.createElement("button");
+   favorite.textContent=n.is_favorite ? "⭐ Favorite থেকে সরান" : "☆ Favorite";
+   favorite.className="secondary";
+   favorite.onclick=()=>toggleFavorite(n.id,n.is_favorite);
+
    const pin=document.createElement("button");
    pin.textContent=n.is_pinned ? "📌 আনপিন" : "📌 পিন";
    pin.className="secondary";
@@ -1432,7 +1461,7 @@ function renderNotes(){
    share.className="secondary";
    share.onclick=()=>shareNote(n);
 
-   actions.append(share,pin,edit,del);
+   actions.append(share,favorite,pin,edit,del);
   }
   div.append(h,p,small,actions);
   box.append(div);
@@ -1474,6 +1503,33 @@ async function shareNote(n){
   }
  }
 }
+async function toggleFavorite(id,isFavorite){
+ const note=allNotes.find(x=>String(x.id)===String(id));
+ if(!note) return;
+ const updated={...note,is_favorite:!isFavorite,_offlinePending:!navigator.onLine};
+ const index=allNotes.findIndex(x=>String(x.id)===String(id));
+ allNotes[index]=updated;
+
+ if(!navigator.onLine || String(id).startsWith("local-")){
+  saveOfflineNote(updated);
+  renderNotes();
+  $("saveMsg").textContent="Favorite পরিবর্তন Offline-এ সংরক্ষিত হয়েছে; Internet এলে Sync হবে।";
+  return;
+ }
+
+ const {error}=await db.from("notes").update({is_favorite:!isFavorite})
+  .eq("id",id).eq("user_id",currentUser.id).is("deleted_at",null);
+ if(error){
+  saveOfflineNote({...updated,_offlinePending:true});
+  $("saveMsg").textContent="Favorite পরিবর্তন Cloud-এ Sync হয়নি; এই ডিভাইসে রাখা হয়েছে।";
+  renderNotes();
+  return;
+ }
+ cacheOfflineNotes();
+ await syncNotes();
+ $("saveMsg").textContent=isFavorite ? "Favorite থেকে সরানো হয়েছে।" : "Favorite-এ যোগ করা হয়েছে।";
+}
+
 async function togglePin(id,isPinned){
  const note=allNotes.find(x=>String(x.id)===String(id));
  if(!note) return;
@@ -1622,6 +1678,7 @@ async function exportBackup(){
    category:n.category || "অন্যান্য",
    color:n.color || "#ffffff",
    is_pinned:!!n.is_pinned,
+   is_favorite:!!n.is_favorite,
    deleted_at:n.deleted_at || null
   }));
 
@@ -1738,6 +1795,7 @@ async function importBackup(event){
     category:String(n.category || "অন্যান্য"),
     color:typeof n.color==="string" ? n.color : "#ffffff",
     is_pinned:!!n.is_pinned,
+    is_favorite:!!n.is_favorite,
     deleted_at:n.deleted_at || null,
     user_id:currentUser.id
    };
