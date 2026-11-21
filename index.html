@@ -323,7 +323,13 @@ async function signUp(){
   return;
  }
 
- const {data,error}=await db.auth.signUp({email,password});
+ const {data,error}=await db.auth.signUp({
+  email,
+  password,
+  options: {
+   emailRedirectTo: "https://krishisohayok.github.io/-pocket-notebook/"
+  }
+ });
  $("authMsg").textContent=error ? error.message : "অ্যাকাউন্ট তৈরি হয়েছে।";
  if(data.session) await startApp(data.session.user);
 }
