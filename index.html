@@ -385,27 +385,43 @@ function reminderFiredKey(){
  return "pocket_reminders_fired_"+(currentUser ? currentUser.id : "none");
 }
 
-function checkDueReminders(){
- if(!currentUser || $("app").classList.contains("hidden")) return;
+let reminderCheckInProgress = false;
+
+async function checkDueReminders(){
+ if(reminderCheckInProgress || !currentUser || $("app").classList.contains("hidden")) return;
  if(!("Notification" in window) || Notification.permission!=="granted") return;
- const now=Date.now();
- let fired=[];
- try{ fired=JSON.parse(localStorage.getItem(reminderFiredKey()) || "[]"); }catch(e){}
- const firedSet=new Set(fired);
- allNotes.forEach(note=>{
-  if(note.deleted_at || !note.reminder_at) return;
-  const when=new Date(note.reminder_at).getTime();
-  if(!Number.isFinite(when) || when>now || firedSet.has(String(note.id))) return;
-  try{
-   const notice=new Notification("Pocket Notebook — Reminder",{
-    body:note.title || "আপনার একটি নোটের সময় হয়েছে।",
-    tag:"pocket-reminder-"+note.id
-   });
-   notice.onclick=()=>{ window.focus(); notice.close(); };
-   firedSet.add(String(note.id));
-  }catch(error){}
- });
- try{ localStorage.setItem(reminderFiredKey(),JSON.stringify(Array.from(firedSet).slice(-500))); }catch(e){}
+ if(!("serviceWorker" in navigator)) return;
+ reminderCheckInProgress = true;
+ try{
+  // Android Chrome requires notifications to be shown through the active Service Worker.
+  const registration = await navigator.serviceWorker.ready;
+  if(!registration || typeof registration.showNotification !== "function") return;
+  const now=Date.now();
+  let fired=[];
+  try{ fired=JSON.parse(localStorage.getItem(reminderFiredKey()) || "[]"); }catch(e){}
+  const firedSet=new Set(fired);
+  for(const note of allNotes){
+   if(note.deleted_at || !note.reminder_at) continue;
+   const when=new Date(note.reminder_at).getTime();
+   if(!Number.isFinite(when) || when>now || firedSet.has(String(note.id))) continue;
+   try{
+    await registration.showNotification("Pocket Notebook — Reminder",{
+     body:note.title || "আপনার একটি নোটের সময় হয়েছে।",
+     tag:"pocket-reminder-"+note.id,
+     icon:"./icons/pocket-notebook-192.png",
+     data:{noteId:String(note.id)}
+    });
+    firedSet.add(String(note.id));
+   }catch(error){
+    console.warn("Reminder notification failed:",error);
+   }
+  }
+  try{ localStorage.setItem(reminderFiredKey(),JSON.stringify(Array.from(firedSet).slice(-500))); }catch(e){}
+ }catch(error){
+  console.warn("Reminder Service Worker is not ready:",error);
+ }finally{
+  reminderCheckInProgress = false;
+ }
 }
 
 function startReminderChecks(){
