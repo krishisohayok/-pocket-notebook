@@ -41,6 +41,21 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 .dashboard-recent:first-child{border-top:0}
 .dashboard-recent strong{display:block;font-size:15px}
 
+
+.auth-card{padding:22px;max-width:480px;margin:22px auto}
+.auth-heading{text-align:center;margin-bottom:18px}
+.auth-heading h3{margin:8px 0}
+.auth-icon{font-size:36px}
+.auth-tabs{display:flex;gap:8px;background:#f0f3f8;padding:5px;border-radius:10px;margin:16px 0}
+.auth-tabs .auth-tab{margin:0;background:transparent;color:#526176;box-shadow:none}
+.auth-tabs .auth-tab.active{background:#2457c5;color:white}
+.auth-label{display:block;font-weight:bold;font-size:14px;margin-top:12px}
+.password-wrap{position:relative;display:flex;align-items:center}
+.password-wrap input{padding-right:76px}
+.password-toggle{position:absolute;right:5px;width:auto;margin:0;padding:8px 10px;background:#e9eef8;color:#2457c5;font-size:13px}
+.auth-hint{margin:0 2px}
+.auth-message{min-height:18px;line-height:1.5}
+.auth-footnote{text-align:center;border-top:1px solid #edf0f5;padding-top:12px;margin-top:16px}
 </style>
 </head>
 
@@ -52,13 +67,27 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 
 <main>
 
-<section id="auth" class="card">
-<h3>অ্যাকাউন্টে প্রবেশ করুন</h3>
-<input id="email" type="email" placeholder="আপনার ইমেইল">
-<input id="password" type="password" placeholder="পাসওয়ার্ড">
-<button onclick="signUp()">নতুন অ্যাকাউন্ট তৈরি</button>
-<button onclick="signIn()" class="secondary">লগইন করুন</button>
-<p id="authMsg" class="small"></p>
+<section id="auth" class="card auth-card">
+<div class="auth-heading">
+ <div class="auth-icon">📒</div>
+ <h3 id="authTitle">আপনার নোটবুকে স্বাগতম</h3>
+ <p id="authSubtitle" class="small">আপনার নোট নিরাপদে সংরক্ষণ করতে লগইন করুন।</p>
+</div>
+<div class="auth-tabs">
+ <button type="button" id="loginModeBtn" class="auth-tab active" onclick="showAuthMode('login')">লগইন</button>
+ <button type="button" id="signupModeBtn" class="auth-tab" onclick="showAuthMode('signup')">নতুন অ্যাকাউন্ট</button>
+</div>
+<label class="auth-label" for="email">ইমেইল ঠিকানা</label>
+<input id="email" type="email" placeholder="আপনার ইমেইল লিখুন" autocomplete="email">
+<label class="auth-label" for="password">পাসওয়ার্ড</label>
+<div class="password-wrap">
+ <input id="password" type="password" placeholder="পাসওয়ার্ড লিখুন" autocomplete="current-password">
+ <button type="button" id="passwordToggle" class="password-toggle" onclick="toggleAuthPassword()">দেখুন</button>
+</div>
+<p id="passwordHint" class="small auth-hint hidden">কমপক্ষে ৬ অক্ষরের একটি পাসওয়ার্ড দিন।</p>
+<button type="button" id="authSubmitBtn" onclick="signIn()">লগইন করুন</button>
+<p id="authMsg" class="small auth-message" aria-live="polite"></p>
+<p class="small auth-footnote">আপনার অ্যাকাউন্টের নোট অন্য ব্যবহারকারীর কাছ থেকে আলাদা থাকবে।</p>
 </section>
 
 <section id="appLock" class="card hidden">
@@ -314,35 +343,92 @@ let trashMode = false;
 
 const $ = id => document.getElementById(id);
 
+let authMode = "login";
+
+function showAuthMode(mode){
+ authMode = mode === "signup" ? "signup" : "login";
+ $("authTitle").textContent = authMode === "signup" ? "নতুন অ্যাকাউন্ট তৈরি করুন" : "আপনার নোটবুকে স্বাগতম";
+ $("authSubtitle").textContent = authMode === "signup"
+  ? "ইমেইল ও পাসওয়ার্ড দিয়ে আপনার অ্যাকাউন্ট খুলুন।"
+  : "আপনার নোটবুকে প্রবেশ করতে লগইন করুন।";
+ $("authSubmitBtn").textContent = authMode === "signup" ? "অ্যাকাউন্ট তৈরি করুন" : "লগইন করুন";
+ $("authSubmitBtn").onclick = authMode === "signup" ? signUp : signIn;
+ $("loginModeBtn").classList.toggle("active",authMode === "login");
+ $("signupModeBtn").classList.toggle("active",authMode === "signup");
+ $("passwordHint").classList.toggle("hidden",authMode !== "signup");
+ $("password").setAttribute("autocomplete",authMode === "signup" ? "new-password" : "current-password");
+ $("authMsg").textContent = "";
+}
+
+function toggleAuthPassword(){
+ const field=$("password");
+ const reveal=field.type === "password";
+ field.type=reveal ? "text" : "password";
+ $("passwordToggle").textContent=reveal ? "লুকান" : "দেখুন";
+}
+
+function authErrorMessage(message){
+ const m=(message || "").toLowerCase();
+ if(m.includes("invalid login credentials")) return "ইমেইল অথবা পাসওয়ার্ড সঠিক নয়। আবার চেষ্টা করুন।";
+ if(m.includes("email not confirmed")) return "আপনার ইমেইল যাচাই করা হয়নি। ইনবক্সে পাঠানো যাচাইকরণ লিংকে চাপ দিন।";
+ if(m.includes("user already registered")) return "এই ইমেইল দিয়ে আগে থেকেই অ্যাকাউন্ট রয়েছে। লগইন করুন।";
+ if(m.includes("password")) return "পাসওয়ার্ড সংক্রান্ত সমস্যা হয়েছে। অন্তত ৬ অক্ষরের পাসওয়ার্ড দিন।";
+ if(m.includes("email")) return "ইমেইল ঠিকানাটি পরীক্ষা করে আবার চেষ্টা করুন।";
+ return "কাজটি সম্পন্ন হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।";
+}
+
 async function signUp(){
  const email=$("email").value.trim();
  const password=$("password").value;
-
  if(!email || password.length<6){
   $("authMsg").textContent="সঠিক ইমেইল এবং অন্তত ৬ অক্ষরের পাসওয়ার্ড দিন।";
   return;
  }
-
- const {data,error}=await db.auth.signUp({
-  email,
-  password,
-  options: {
-   emailRedirectTo: "https://krishisohayok.github.io/-pocket-notebook/"
+ $("authSubmitBtn").disabled=true;
+ $("authMsg").textContent="অ্যাকাউন্ট তৈরি হচ্ছে...";
+ try{
+  const {data,error}=await db.auth.signUp({
+   email,password,
+   options:{emailRedirectTo:"https://krishisohayok.github.io/-pocket-notebook/"}
+  });
+  if(error){
+   $("authMsg").textContent=authErrorMessage(error.message);
+  }else if(data.session){
+   $("authMsg").textContent="অ্যাকাউন্ট তৈরি হয়েছে।";
+   await startApp(data.session.user);
+  }else{
+   $("authMsg").textContent="অ্যাকাউন্ট তৈরি হয়েছে। আপনার ইমেইলে পাঠানো যাচাইকরণ লিংকে চাপ দিন।";
   }
- });
- $("authMsg").textContent=error ? error.message : "অ্যাকাউন্ট তৈরি হয়েছে।";
- if(data.session) await startApp(data.session.user);
+ }catch(error){
+  $("authMsg").textContent=authErrorMessage(error.message);
+ }finally{
+  $("authSubmitBtn").disabled=false;
+ }
 }
 
 async function signIn(){
  const email=$("email").value.trim();
  const password=$("password").value;
-
- const {data,error}=await db.auth.signInWithPassword({email,password});
- $("authMsg").textContent=error ? error.message : "লগইন সফল!";
- if(data.session) await startApp(data.session.user);
+ if(!email || !password){
+  $("authMsg").textContent="আপনার ইমেইল ও পাসওয়ার্ড লিখুন।";
+  return;
+ }
+ $("authSubmitBtn").disabled=true;
+ $("authMsg").textContent="লগইন হচ্ছে...";
+ try{
+  const {data,error}=await db.auth.signInWithPassword({email,password});
+  if(error){
+   $("authMsg").textContent=authErrorMessage(error.message);
+  }else if(data.session){
+   $("authMsg").textContent="লগইন সফল!";
+   await startApp(data.session.user);
+  }
+ }catch(error){
+  $("authMsg").textContent=authErrorMessage(error.message);
+ }finally{
+  $("authSubmitBtn").disabled=false;
+ }
 }
-
 
 function pinStorageKey(userId){
  return "pocket_pin_" + userId;
@@ -613,6 +699,10 @@ if(pocketAutoLockTimer){
  $("app").classList.add("hidden");
  $("appLock").classList.add("hidden");
  $("auth").classList.remove("hidden");
+ showAuthMode("login");
+ $("password").value="";
+ $("password").type="password";
+ $("passwordToggle").textContent="দেখুন";
 
  $("newPin").value="";
  $("confirmPin").value="";
