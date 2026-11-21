@@ -30,6 +30,17 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 .color-label{font-weight:bold;margin-top:10px;display:block}
 .tabs{display:flex;gap:8px}
 .tabs button{flex:1}
+
+.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.dashboard-stat{background:#f4f7fc;border:1px solid #e2e8f2;border-radius:10px;padding:13px;text-align:center}
+.dashboard-stat strong{display:block;font-size:25px;color:#2457c5;margin-top:4px}
+.dashboard-stat span{font-size:13px;color:#65758b}
+.dashboard-categories{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.dashboard-category{background:#f4f7fc;border-radius:18px;padding:7px 11px;font-size:13px}
+.dashboard-recent{border-top:1px solid #e6eaf0;padding:9px 2px}
+.dashboard-recent:first-child{border-top:0}
+.dashboard-recent strong{display:block;font-size:15px}
+
 </style>
 </head>
 
@@ -184,6 +195,21 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <p id="userInfo"></p>
 <p id="networkStatus" class="small">ইন্টারনেট সংযোগ যাচাই হচ্ছে...</p>
 <button class="secondary" onclick="signOut()">লগআউট</button>
+
+<div class="card" id="dashboard" style="margin:16px 0">
+ <h3>📊 Dashboard</h3>
+ <p class="small">আপনার নোটবুকের সংক্ষিপ্ত হিসাব</p>
+ <div class="dashboard-grid">
+  <div class="dashboard-stat"><span>মোট নোট</span><strong id="dashTotal">০</strong></div>
+  <div class="dashboard-stat"><span>📌 পিন করা</span><strong id="dashPinned">০</strong></div>
+  <div class="dashboard-stat"><span>🗑️ Trash</span><strong id="dashTrash">০</strong></div>
+  <div class="dashboard-stat"><span>📅 আজকের নোট</span><strong id="dashToday">০</strong></div>
+ </div>
+ <h4>ক্যাটাগরি অনুযায়ী</h4>
+ <div id="dashCategories" class="dashboard-categories"></div>
+ <h4 style="margin-top:18px">🕒 সাম্প্রতিক নোট</h4>
+ <div id="dashRecent"><p class="small">এখনও কোনো নোট নেই।</p></div>
+</div>
 
 <h3>নতুন নোট লিখুন</h3>
 <input id="title" placeholder="নোটের শিরোনাম">
@@ -1061,7 +1087,82 @@ async function loadNoteAttachments(noteId, card){
  }
 }
   
+
+function renderDashboard(){
+ const active=allNotes.filter(n=>!n.deleted_at);
+ const trashed=allNotes.filter(n=>!!n.deleted_at);
+ const todayKey=(()=>{
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+ })();
+ const noteDateKey=value=>{
+  if(!value) return "";
+  const d=new Date(value);
+  if(Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+ };
+ const setCount=(id,value)=>{ const el=$(id); if(el) el.textContent=Number(value).toLocaleString("bn-BD"); };
+ setCount("dashTotal",active.length);
+ setCount("dashPinned",active.filter(n=>!!n.is_pinned).length);
+ setCount("dashTrash",trashed.length);
+ setCount("dashToday",active.filter(n=>noteDateKey(n.created_at)===todayKey).length);
+
+ const categoryBox=$("dashCategories");
+ if(categoryBox){
+  categoryBox.innerHTML="";
+  const counts={};
+  active.forEach(n=>{
+   const category=n.category || "অন্যান্য";
+   counts[category]=(counts[category] || 0)+1;
+  });
+  const categories=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  if(!categories.length){
+   const empty=document.createElement("span");
+   empty.className="small";
+   empty.textContent="এখনও কোনো ক্যাটাগরির নোট নেই।";
+   categoryBox.append(empty);
+  }else{
+   categories.forEach(([name,count])=>{
+    const chip=document.createElement("span");
+    chip.className="dashboard-category";
+    chip.textContent=`${name}: ${count.toLocaleString("bn-BD")}`;
+    chip.style.borderLeft=`4px solid ${getCategoryColor(name)}`;
+    categoryBox.append(chip);
+   });
+  }
+ }
+
+ const recentBox=$("dashRecent");
+ if(recentBox){
+  recentBox.innerHTML="";
+  const recent=[...active].sort((a,b)=>{
+   const at=new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+   const bt=new Date(b.updated_at || b.created_at || 0).getTime() || 0;
+   return bt-at;
+  }).slice(0,3);
+  if(!recent.length){
+   const empty=document.createElement("p");
+   empty.className="small";
+   empty.textContent="এখনও কোনো নোট নেই। প্রথম নোটটি লিখুন।";
+   recentBox.append(empty);
+  }else{
+   recent.forEach(n=>{
+    const item=document.createElement("div");
+    item.className="dashboard-recent";
+    const title=document.createElement("strong");
+    title.textContent=(n.is_pinned ? "📌 " : "")+(n.title || "শিরোনামহীন নোট");
+    const meta=document.createElement("span");
+    meta.className="small";
+    meta.textContent=(n.category || "অন্যান্য")+(n.created_at ? " • "+new Date(n.created_at).toLocaleDateString("bn-BD") : "");
+    item.append(title,meta);
+    recentBox.append(item);
+   });
+  }
+ }
+}
+
 function renderNotes(){
+ renderDashboard();
  const rawQuery=$("search").value.trim().toLocaleLowerCase();
  const terms=rawQuery.split(/\\s+/).filter(Boolean);
  const dateMode=$("dateFilter") ? $("dateFilter").value : "all";
