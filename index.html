@@ -352,10 +352,60 @@ let allNotes = [];
 let editingId = null;
 let trashMode = false;
 let favoriteMode = false;
+let pendingReminderNoteId = new URLSearchParams(location.search).get("reminderNote");
 
 const $ = id => document.getElementById(id);
 
 let reminderCheckTimer = null;
+
+function noteCardElementId(noteId){
+ return "note-card-"+String(noteId).replace(/[^a-zA-Z0-9_-]/g,"_");
+}
+
+async function openReminderNote(noteId){
+ if(!noteId || !currentUser || $("app").classList.contains("hidden")){
+  pendingReminderNoteId=noteId || pendingReminderNoteId;
+  return;
+ }
+
+ await syncNotes();
+ const note=allNotes.find(n=>String(n.id)===String(noteId));
+ if(!note){
+  $("saveMsg").textContent="Reminder-এর নোটটি এই অ্যাকাউন্টে পাওয়া যায়নি।";
+  return;
+ }
+
+ trashMode=!!note.deleted_at;
+ favoriteMode=false;
+ updateNoteTabs();
+ clearSearch();
+ if($("dateFilter")) $("dateFilter").value="all";
+ if($("specificNoteDate")) $("specificNoteDate").value="";
+ renderNotes();
+
+ const card=document.getElementById(noteCardElementId(noteId));
+ if(card){
+  card.scrollIntoView({behavior:"smooth",block:"center"});
+  card.style.outline="3px solid #2563eb";
+  card.style.outlineOffset="3px";
+ }
+ $("saveMsg").textContent="🔔 Reminder-এর নোটটি দেখানো হচ্ছে।";
+ pendingReminderNoteId=null;
+ try{
+  const url=new URL(location.href);
+  url.searchParams.delete("reminderNote");
+  history.replaceState({},"",url.pathname+url.search+url.hash);
+ }catch(e){}
+}
+
+window.addEventListener("message",event=>{
+ const data=event.data;
+ if(!data || data.type!=="OPEN_REMINDER_NOTE" || !data.noteId) return;
+ pendingReminderNoteId=String(data.noteId);
+ if(currentUser && !$("app").classList.contains("hidden")){
+  openReminderNote(pendingReminderNoteId);
+ }
+});
 
 function toLocalDateTimeInput(value){
  if(!value) return "";
@@ -607,6 +657,11 @@ async function enterNotebook(){
 
  await syncNotes();
  startReminderChecks();
+
+ if(pendingReminderNoteId){
+  const reminderId=pendingReminderNoteId;
+  await openReminderNote(reminderId);
+ }
 
  setupPocketAutoLock();
  resetPocketAutoLockTimer();
@@ -1485,6 +1540,7 @@ function renderNotes(){
 
  filtered.forEach(n=>{
   const div=document.createElement("div");
+  div.id=noteCardElementId(n.id);
   div.className="card note";
   const savedColor=(n.color || "#ffffff").toLowerCase();
   const usesDefaultWhite=savedColor==="#ffffff" || savedColor==="#fff";
