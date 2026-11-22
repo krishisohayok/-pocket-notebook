@@ -416,20 +416,40 @@ function toLocalDateTimeInput(value){
   "T"+pad(d.getHours())+":"+pad(d.getMinutes());
 }
 
+
 async function requestReminderPermission(){
- if(!("Notification" in window)){
-  $("reminderPermissionMsg").textContent="এই Browser-এ Notification সমর্থিত নয়।";
+ const msg = $("reminderPermissionMsg");
+
+ if(!currentUser){
+  msg.textContent = "আগে লগইন করুন।";
   return;
  }
+
+ if(!("Notification" in window)){
+  msg.textContent = "এই Browser-এ Notification সমর্থিত নয়।";
+  return;
+ }
+
  try{
-  const permission=await Notification.requestPermission();
-  $("reminderPermissionMsg").textContent=permission==="granted"
-   ? "নোটিফিকেশনের অনুমতি চালু হয়েছে।"
-   : "নোটিফিকেশনের অনুমতি দেওয়া হয়নি। Browser Settings থেকে অনুমতি দিতে পারেন।";
+  const permission = await Notification.requestPermission();
+
+  if(permission !== "granted"){
+   msg.textContent = "নোটিফিকেশনের অনুমতি দেওয়া হয়নি। Browser Settings থেকে অনুমতি দিন।";
+   return;
+  }
+
+  msg.textContent = "Push Notification চালু হচ্ছে...";
+
+  await registerPocketPush();
+
+  msg.textContent = "সফল! আপনার ডিভাইসে Push Notification চালু হয়েছে। ❤️";
+
  }catch(error){
-  $("reminderPermissionMsg").textContent="অনুমতি নেওয়া যায়নি।";
+  console.error("Push setup error:", error);
+  msg.textContent = "Push চালু করা যায়নি: " + error.message;
  }
 }
+ 
 
 function reminderFiredKey(){
  return "pocket_reminders_fired_"+(currentUser ? currentUser.id : "none");
