@@ -32,7 +32,33 @@ self.addEventListener("activate", event => {
       .then(() => self.clients.claim())
   );
 });
+// Background Push Notification
+self.addEventListener("push", event => {
+  let data = {};
 
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (error) {
+    data = {};
+  }
+
+  const title = data.title || "Pocket Notebook";
+  const options = {
+    body: data.body || "আপনার নোটের রিমাইন্ডার এসেছে।",
+    icon: "./pocket-notebook-192.png",
+    badge: "./pocket-notebook-192.png",
+    data: {
+      noteId: data.noteId || null
+    },
+    tag: data.noteId
+      ? "pocket-note-" + data.noteId
+      : "pocket-notebook-reminder"
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
 // Notification click handler
 self.addEventListener("notificationclick", event => {
   event.notification.close();
