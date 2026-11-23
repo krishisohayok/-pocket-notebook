@@ -39,6 +39,14 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 .dashboard-category{background:#f4f7fc;border-radius:18px;padding:7px 11px;font-size:13px}
 .dashboard-recent{border-top:1px solid #e6eaf0;padding:9px 2px}
 .dashboard-recent:first-child{border-top:0}
+.notification-item{display:flex;gap:10px;align-items:flex-start;padding:13px 0;border-bottom:1px solid #e6eaf0}
+.notification-item:last-child{border-bottom:0}
+.notification-icon{width:40px;height:40px;flex:0 0 40px;border-radius:12px;background:#edf3ff;display:grid;place-items:center;font-size:19px}
+.notification-content{flex:1;min-width:0}
+.notification-content strong{display:block;margin-bottom:4px}
+.notification-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.notification-actions button{width:auto;margin:0;padding:8px 10px;font-size:13px}
+.notification-unread{background:#f7faff;border-radius:10px;padding:10px}
 .dashboard-recent strong{display:block;font-size:15px}
 
 
@@ -224,7 +232,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <div class="card">
 <p id="userInfo"></p>
 <p id="networkStatus" class="small">ইন্টারনেট সংযোগ যাচাই হচ্ছে...</p>
-<button class="secondary" onclick="signOut()">লগআউট</button>
+<div class="actions"><button type="button" class="secondary" onclick="showNotificationHistory()">🔔 Notification History <span id="notificationUnreadBadge"></span></button><button class="secondary" onclick="signOut()">লগআউট</button></div>
 
 <div class="card" id="dashboard" style="margin:16px 0">
  <h3>📊 Dashboard</h3>
@@ -336,6 +344,20 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <p class="small">আপনার Backup ফাইল নির্বাচন করুন।</p>
 <div id="notes"></div>
 </div>
+
+<section id="notificationHistoryPage" class="card hidden" aria-live="polite">
+ <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+  <h3 style="margin:4px 0">🔔 Notification History</h3>
+  <button type="button" class="secondary" style="width:auto" onclick="hideNotificationHistory()">ফিরে যান</button>
+ </div>
+ <p class="small">আপনার অ্যাকাউন্টে আসা রিমাইন্ডার নোটিফিকেশনগুলো এখানে থাকবে।</p>
+ <div class="actions">
+  <button type="button" class="secondary" onclick="loadNotificationHistory()">↻ Refresh</button>
+  <button type="button" class="secondary" onclick="markAllNotificationsRead()">সব পঠিত করুন</button>
+ </div>
+ <p id="notificationHistoryMessage" class="small" aria-live="polite"></p>
+ <div id="notificationHistoryList"></div>
+</section>
 
 </section>
 </main>
@@ -2312,6 +2334,148 @@ async function resetPinAfterRecovery(){
  }
     }
   
+async function showNotificationHistory(){
+ const page=$("notificationHistoryPage");
+ if(!page) return;
+ page.classList.remove("hidden");
+ const dashboard=$("dashboard");
+ if(dashboard) dashboard.classList.add("hidden");
+ // Keep the existing notebook UI intact; the history is shown below it.
+ await loadNotificationHistory();
+ page.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function hideNotificationHistory(){
+ const page=$("notificationHistoryPage");
+ if(page) page.classList.add("hidden");
+ const dashboard=$("dashboard");
+ if(dashboard) dashboard.classList.remove("hidden");
+}
+
+function updateNotificationUnreadBadge(count){
+ const badge=$("notificationUnreadBadge");
+ if(!badge) return;
+ badge.textContent=count>0 ? `(${count.toLocaleString("bn-BD")})` : "";
+}
+
+async function loadNotificationHistory(){
+ const list=$("notificationHistoryList");
+ const message=$("notificationHistoryMessage");
+ if(!list || !message || !currentUser) return;
+ list.innerHTML="";
+ message.textContent="নোটিফিকেশন লোড হচ্ছে...";
+ if(!navigator.onLine){
+  message.textContent="Notification History দেখতে ইন্টারনেট সংযোগ প্রয়োজন।";
+  return;
+ }
+ const userId=currentUser.id;
+ const {data,error}=await db.from("notifications")
+  .select("id,user_id,note_id,title,body,created_at,is_read")
+  .eq("user_id",userId)
+  .order("created_at",{ascending:false})
+  .limit(100);
+ if(!currentUser || currentUser.id!==userId) return;
+ if(error){
+  message.textContent="নোটিফিকেশন লোড করা যায়নি: "+error.message;
+  updateNotificationUnreadBadge(0);
+  return;
+ }
+ const rows=data || [];
+ updateNotificationUnreadBadge(rows.filter(n=>!n.is_read).length);
+ message.textContent=rows.length ? `${rows.length.toLocaleString("bn-BD")}টি সাম্প্রতিক নোটিফিকেশন` : "এখনও কোনও Notification History নেই।";
+ if(!rows.length) return;
+ rows.forEach(n=>{
+  const item=document.createElement("article");
+  item.className="notification-item"+(n.is_read?"":" notification-unread");
+  const icon=document.createElement("div");
+  icon.className="notification-icon";
+  icon.textContent="🔔";
+  const content=document.createElement("div");
+  content.className="notification-content";
+  const title=document.createElement("strong");
+  title.textContent=n.title || "Pocket Notebook";
+  const body=document.createElement("div");
+  body.textContent=n.body || "আপনার নোটের রিমাইন্ডার এসেছে।";
+  const meta=document.createElement("div");
+  meta.className="small";
+  const date=n.created_at ? new Date(n.created_at) : null;
+  meta.textContent=date && !Number.isNaN(date.getTime()) ? date.toLocaleString("bn-BD") : "সময় অজানা";
+  const status=document.createElement("div");
+  status.className="small";
+  status.textContent=n.is_read ? "✓ পঠিত" : "● অপঠিত";
+  const actions=document.createElement("div");
+  actions.className="notification-actions";
+  if(n.note_id){
+   const open=document.createElement("button");
+   open.type="button";
+   open.textContent="নোট খুলুন";
+   open.addEventListener("click",async()=>{
+    await setNotificationRead(n.id,true,false);
+    hideNotificationHistory();
+    await openReminderNote(n.note_id);
+   });
+   actions.append(open);
+  }
+  if(!n.is_read){
+   const read=document.createElement("button");
+   read.type="button";
+   read.className="secondary";
+   read.textContent="পঠিত করুন";
+   read.addEventListener("click",()=>setNotificationRead(n.id,true,true));
+   actions.append(read);
+  }
+  const remove=document.createElement("button");
+  remove.type="button";
+  remove.className="danger";
+  remove.textContent="মুছুন";
+  remove.addEventListener("click",()=>deleteNotificationHistoryItem(n.id));
+  actions.append(remove);
+  content.append(title,body,meta,status,actions);
+  item.append(icon,content);
+  list.append(item);
+ });
+}
+
+async function setNotificationRead(notificationId,isRead,refresh=true){
+ if(!currentUser) return;
+ const {error}=await db.from("notifications")
+  .update({is_read:isRead})
+  .eq("id",notificationId)
+  .eq("user_id",currentUser.id);
+ if(error){
+  $("notificationHistoryMessage").textContent="পঠিত অবস্থা পরিবর্তন করা যায়নি: "+error.message;
+  return;
+ }
+ if(refresh) await loadNotificationHistory();
+ else updateNotificationUnreadBadge(Math.max(0,Number(($('notificationUnreadBadge').textContent.match(/[০-৯0-9]+/)||['0'])[0].replace(/[০-৯]/g,d=>'০১২৩৪৫৬৭৮৯'.indexOf(d))) - 1));
+}
+
+async function markAllNotificationsRead(){
+ if(!currentUser) return;
+ const {error}=await db.from("notifications")
+  .update({is_read:true})
+  .eq("user_id",currentUser.id)
+  .eq("is_read",false);
+ if(error){
+  $("notificationHistoryMessage").textContent="সব নোটিফিকেশন পঠিত করা যায়নি: "+error.message;
+  return;
+ }
+ await loadNotificationHistory();
+}
+
+async function deleteNotificationHistoryItem(notificationId){
+ if(!currentUser || !confirm("এই নোটিফিকেশনটি মুছে ফেলবেন?")) return;
+ const {error}=await db.from("notifications")
+  .delete()
+  .eq("id",notificationId)
+  .eq("user_id",currentUser.id);
+ if(error){
+  $("notificationHistoryMessage").textContent="নোটিফিকেশন মুছে ফেলা যায়নি: "+error.message;
+  return;
+ }
+ await loadNotificationHistory();
+}
+
 function updateNetworkStatus(){
  const el=$("networkStatus");
  if(!el) return;
