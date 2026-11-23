@@ -243,6 +243,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
   <div class="dashboard-stat"><span>⭐ Favorite</span><strong id="dashFavorites">০</strong></div>
   <div class="dashboard-stat"><span>🗑️ Trash</span><strong id="dashTrash">০</strong></div>
   <div class="dashboard-stat"><span>📅 আজকের নোট</span><strong id="dashToday">০</strong></div>
+  <div class="dashboard-stat"><span>🔔 অপঠিত নোটিফিকেশন</span><strong id="dashUnreadNotifications">০</strong></div>
  </div>
  <h4>ক্যাটাগরি অনুযায়ী</h4>
  <div id="dashCategories" class="dashboard-categories"></div>
@@ -773,6 +774,7 @@ async function enterNotebook(){
  $("app").classList.remove("hidden");
 
  await syncNotes();
+ await refreshDashboardUnreadNotifications();
  startReminderChecks();
 
  if(pendingReminderNoteId){
@@ -1473,6 +1475,23 @@ async function loadNoteAttachments(noteId, card){
  }
 }
   
+
+async function refreshDashboardUnreadNotifications(){
+ const userId=currentUser && currentUser.id;
+ if(!userId) return;
+ const {count,error}=await db.from("notifications")
+  .select("id",{count:"exact",head:true})
+  .eq("user_id",userId)
+  .eq("is_read",false);
+ if(!currentUser || currentUser.id!==userId) return;
+ if(error){
+  console.warn("Dashboard unread notification count failed:",error.message);
+  return;
+ }
+ const el=$("dashUnreadNotifications");
+ if(el) el.textContent=Number(count || 0).toLocaleString("bn-BD");
+ updateNotificationUnreadBadge(Number(count || 0));
+}
 
 function renderDashboard(){
  const active=allNotes.filter(n=>!n.deleted_at);
@@ -2381,7 +2400,7 @@ async function loadNotificationHistory(){
   return;
  }
  const rows=data || [];
- updateNotificationUnreadBadge(rows.filter(n=>!n.is_read).length);
+ await refreshDashboardUnreadNotifications();
  message.textContent=rows.length ? `${rows.length.toLocaleString("bn-BD")}টি সাম্প্রতিক নোটিফিকেশন` : "এখনও কোনও Notification History নেই।";
  if(!rows.length) return;
  rows.forEach(n=>{
@@ -2447,7 +2466,7 @@ async function setNotificationRead(notificationId,isRead,refresh=true){
   return;
  }
  if(refresh) await loadNotificationHistory();
- else updateNotificationUnreadBadge(Math.max(0,Number(($('notificationUnreadBadge').textContent.match(/[০-৯0-9]+/)||['0'])[0].replace(/[০-৯]/g,d=>'০১২৩৪৫৬৭৮৯'.indexOf(d))) - 1));
+ else await refreshDashboardUnreadNotifications();
 }
 
 async function markAllNotificationsRead(){
