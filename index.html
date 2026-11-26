@@ -77,6 +77,15 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 .offers-card p{margin:6px 0 10px}
 .offers-button{display:block;width:100%;padding:13px 14px;margin:0;background:#e6a323;color:#302000;text-decoration:none;text-align:center;font-weight:bold;font-size:16px;border-radius:9px}
 .offers-note{font-size:12px;color:#79684e;margin-top:9px}
+
+.support-card{background:#f0f7ff;border:1px solid #c9def8;border-radius:14px;padding:16px;margin:14px 0;text-align:center}
+.support-card h3{margin:3px 0 8px;color:#214f91}
+.support-card p{margin:7px 0 12px}
+.support-qr{display:block;width:220px;height:220px;max-width:100%;object-fit:contain;margin:12px auto;background:#fff;border:1px solid #e2e8f0;border-radius:10px}
+.support-upi{display:inline-block;word-break:break-all;font-weight:700;color:#214f91;background:#fff;border:1px solid #d9e6f7;border-radius:8px;padding:9px 12px;margin:5px 0 10px}
+.support-pay{display:block;width:100%;padding:13px 14px;margin:8px 0;background:#2457c5;color:#fff;text-decoration:none;text-align:center;font-weight:bold;font-size:16px;border-radius:9px}
+.support-copy{background:#fff;color:#2457c5;border:1px solid #2457c5}
+.support-note{font-size:12px;color:#65758b;margin-top:10px}
 </style>
 </head>
 
@@ -93,6 +102,17 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <p class="small">ওয়েবসাইটের পাশাপাশি আপনার Android ফোনেও Pocket Notebook ব্যবহার করুন।</p>
  <a class="download-app-button" href="https://github.com/krishisohayok/-pocket-notebook/releases/download/v1.0.0/Pocket-Notebook.apk">⬇️ Android App ডাউনলোড করুন</a>
  <p class="download-app-note">ডাউনলোড সম্পন্ন হলে APK ফাইলটি খুলে Install করুন।</p>
+</section>
+
+
+<section class="support-card" id="supportPocketNotebook" aria-label="Support Pocket Notebook">
+ <h3>💙 Support Pocket Notebook</h3>
+ <p>এই অ্যাপটি আপনার কাজে লাগলে, ইচ্ছা হলে স্বেচ্ছায় সামান্য সহায়তা করতে পারেন। আপনার সহায়তা অ্যাপটি উন্নত করতে উৎসাহ দেবে।</p>
+ <img class="support-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=upi%3A%2F%2Fpay%3Fpa%3Dselimshaikh0051%40ybl%26pn%3DPocket%2520Notebook%26tn%3DSupport%2520Pocket%2520Notebook%26cu%3DINR" alt="Pocket Notebook-এর UPI পেমেন্ট QR কোড" loading="lazy">
+ <div class="support-upi" id="supportUpiId">selimshaikh0051@ybl</div>
+ <button type="button" class="support-copy" onclick="copySupportUpi()">📋 UPI ID কপি করুন</button>
+ <a class="support-pay" href="upi://pay?pa=selimshaikh0051@ybl&pn=Pocket%20Notebook&tn=Support%20Pocket%20Notebook&cu=INR">💸 UPI অ্যাপ দিয়ে সাহায্য করুন</a>
+ <p class="support-note" id="supportCopyMessage" aria-live="polite">QR কোড স্ক্যান করুন অথবা UPI ID ব্যবহার করুন। সহায়তা সম্পূর্ণ ঐচ্ছিক।</p>
 </section>
 
 <section id="auth" class="card auth-card">
@@ -2553,6 +2573,29 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
 db.auth.getSession().then(({data})=>{
  if(data.session) startApp(data.session.user);
 });
+
+async function copySupportUpi(){
+ const upiId="selimshaikh0051@ybl";
+ const message=document.getElementById("supportCopyMessage");
+ try{
+  if(navigator.clipboard && window.isSecureContext){
+   await navigator.clipboard.writeText(upiId);
+  }else{
+   const field=document.createElement("textarea");
+   field.value=upiId;
+   field.style.position="fixed";
+   field.style.opacity="0";
+   document.body.appendChild(field);
+   field.select();
+   const copied=document.execCommand("copy");
+   field.remove();
+   if(!copied) throw new Error("Copy unavailable");
+  }
+  message.textContent="UPI ID কপি হয়েছে। আপনার UPI অ্যাপে পেস্ট করুন।";
+ }catch(error){
+  message.textContent="UPI ID: "+upiId+" — উপরের ID-টি চেপে ধরে কপি করুন।";
+ }
+}
 </script>
 
 </body>
