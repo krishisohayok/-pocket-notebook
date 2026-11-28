@@ -136,6 +136,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <button type="button" class="pn-menu-item" data-menu-target="pocketSettings" onclick="navigatePocketMenu('pocketSettings')"><span class="pn-menu-icon" aria-hidden="true">⚙️</span><span>Settings / সেটিংস</span></button>
  <button type="button" class="pn-menu-item" data-menu-target="notesSection" onclick="navigatePocketMenu('notesSection')"><span class="pn-menu-icon" aria-hidden="true">📝</span><span>My Notes / আমার নোট</span></button>
  <a class="pn-menu-item" href="https://github.com/krishisohayok/-pocket-notebook/releases/download/v1.0.0/Pocket-Notebook.apk" style="text-decoration:none"><span class="pn-menu-icon" aria-hidden="true">📱</span><span>Android App ডাউনলোড</span></a>
+ <button type="button" class="pn-menu-item" id="pocketInstallButton" onclick="installPocketNotebook()" hidden><span class="pn-menu-icon" aria-hidden="true">📲</span><span>Install Pocket Notebook</span></button>
 </nav>
 
 <main>
@@ -2806,6 +2807,36 @@ function navigatePocketMenu(targetId){
  else showPocketView("notes");
 }
 document.addEventListener("keydown",event=>{if(event.key==="Escape") closePocketMenu();});
+
+// Native PWA install prompt: show only when install is available and app is not installed.
+let pocketInstallPrompt=null;
+function pocketIsInstalled(){
+ return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.navigator.standalone===true;
+}
+function updatePocketInstallButton(){
+ const button=document.getElementById("pocketInstallButton");
+ if(!button) return;
+ button.hidden=pocketIsInstalled() || !pocketInstallPrompt;
+}
+window.addEventListener("beforeinstallprompt",event=>{
+ if(pocketIsInstalled()) return;
+ event.preventDefault();
+ pocketInstallPrompt=event;
+ updatePocketInstallButton();
+});
+window.addEventListener("appinstalled",()=>{
+ pocketInstallPrompt=null;
+ updatePocketInstallButton();
+});
+function installPocketNotebook(){
+ if(!pocketInstallPrompt) return;
+ const promptEvent=pocketInstallPrompt;
+ pocketInstallPrompt=null;
+ updatePocketInstallButton();
+ promptEvent.prompt();
+ promptEvent.userChoice.then(()=>updatePocketInstallButton()).catch(()=>updatePocketInstallButton());
+}
+window.addEventListener("pageshow",updatePocketInstallButton);
 </script>
 
 </body>
