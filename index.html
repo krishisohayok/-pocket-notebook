@@ -11,6 +11,8 @@
 
 <style>
 *{box-sizing:border-box}
+/* Respect the HTML hidden attribute even when component CSS sets display:flex/block. */
+[hidden]{display:none!important}
 body{margin:0;font-family:Arial,sans-serif;background:#f2f5f9;color:#202938}
 header{background:#2457c5;color:white;padding:20px;text-align:center;position:relative;min-height:116px}
 header h2{margin:12px 0 8px}
@@ -2866,6 +2868,12 @@ async function installPocketNotebook(){
 }
 window.addEventListener("pageshow",updatePocketInstallButton);
 document.addEventListener("DOMContentLoaded",updatePocketInstallButton);
+window.addEventListener("focus",updatePocketInstallButton);
+try{
+ const standaloneQuery=window.matchMedia("(display-mode: standalone)");
+ if(standaloneQuery.addEventListener) standaloneQuery.addEventListener("change",updatePocketInstallButton);
+ else if(standaloneQuery.addListener) standaloneQuery.addListener(updatePocketInstallButton);
+}catch(e){}
 </script>
 
 </body>
