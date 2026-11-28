@@ -12,7 +12,21 @@
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,sans-serif;background:#f2f5f9;color:#202938}
-header{background:#2457c5;color:white;padding:20px;text-align:center}
+header{background:#2457c5;color:white;padding:20px;text-align:center;position:relative;min-height:116px}
+header h2{margin:12px 0 8px}
+.pn-menu-toggle{position:absolute;left:10px;top:18px;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:10px;background:transparent;color:#fff;font-size:28px;line-height:1;display:none;place-items:center;z-index:5}
+.pn-menu-toggle:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.pn-menu-overlay{position:fixed;inset:0;background:rgba(12,22,40,.45);z-index:1000;opacity:0;visibility:hidden;transition:opacity .22s ease,visibility .22s ease}
+.pn-menu-overlay.open{opacity:1;visibility:visible}
+.pn-side-menu{position:fixed;left:0;top:0;bottom:0;width:min(290px,85vw);background:#fff;z-index:1001;box-shadow:4px 0 24px #0002;transform:translateX(-105%);transition:transform .24s ease;padding:0 14px 18px;overflow-y:auto;visibility:hidden}
+.pn-side-menu.open{transform:translateX(0);visibility:visible}
+.pn-menu-head{background:#2457c5;color:#fff;margin:0 -14px 14px;padding:25px 18px 20px}
+.pn-menu-head strong{display:block;font-size:20px}
+.pn-menu-head small{display:block;margin-top:6px;opacity:.9}
+.pn-menu-item{display:flex;align-items:center;gap:13px;width:100%;margin:6px 0;padding:14px 13px;background:transparent;color:#253247;border:0;border-radius:10px;text-align:left;font-size:16px;font-weight:600}
+.pn-menu-item .pn-menu-icon{width:28px;text-align:center;font-size:21px}
+.pn-menu-item:active,.pn-menu-item.active{background:#edf3ff;color:#2457c5}
+body.pn-menu-open{overflow:hidden}
 main{max-width:700px;margin:auto;padding:16px}
 .card{background:white;padding:16px;border-radius:12px;margin:12px 0;box-shadow:0 2px 8px #0001}
 input,textarea,select,button{width:100%;padding:12px;margin:6px 0;border:1px solid #ccd3df;border-radius:8px;font-size:16px}
@@ -104,9 +118,18 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 
 <body>
 <header>
+<button type="button" class="pn-menu-toggle" id="pocketMenuToggle" aria-label="মেনু খুলুন" aria-controls="pocketSideMenu" aria-expanded="false" onclick="togglePocketMenu()">☰</button>
 <h2>📒 Pocket Notebook</h2>
 <p>আপনার ব্যক্তিগত ডিজিটাল নোটবুক</p>
 </header>
+
+<div class="pn-menu-overlay" id="pocketMenuOverlay" onclick="closePocketMenu()" aria-hidden="true"></div>
+<nav class="pn-side-menu" id="pocketSideMenu" aria-label="Pocket Notebook মেনু" aria-hidden="true">
+ <div class="pn-menu-head"><strong>📒 Pocket Notebook</strong><small>আপনার ব্যক্তিগত ডিজিটাল নোটবুক</small></div>
+ <button type="button" class="pn-menu-item" data-menu-target="dashboard" onclick="navigatePocketMenu('dashboard')"><span class="pn-menu-icon" aria-hidden="true">📊</span><span>Dashboard</span></button>
+ <button type="button" class="pn-menu-item" data-menu-target="pocketSettings" onclick="navigatePocketMenu('pocketSettings')"><span class="pn-menu-icon" aria-hidden="true">⚙️</span><span>Settings / সেটিংস</span></button>
+ <button type="button" class="pn-menu-item" data-menu-target="notesSection" onclick="navigatePocketMenu('notesSection')"><span class="pn-menu-icon" aria-hidden="true">📝</span><span>My Notes / আমার নোট</span></button>
+</nav>
 
 <main>
 
@@ -344,7 +367,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <div id="dashRecent"><p class="small">এখনও কোনো নোট নেই।</p></div>
 </div>
 
-<h3>নতুন নোট লিখুন</h3>
+<h3 id="notesSection">নতুন নোট লিখুন</h3>
 <input id="title" placeholder="নোটের শিরোনাম">
 
 <select id="category" onchange="applyCategoryColor()">
@@ -832,6 +855,9 @@ function resetPocketAutoLockTimer(recordActivity=true){
 
 function lockPocketNotebook(){
 
+ closePocketMenu();
+ const menuToggle=document.getElementById("pocketMenuToggle");
+ if(menuToggle) menuToggle.style.display="none";
  if(currentUser){
   try{ sessionStorage.removeItem(pocketUnlockActivityKey(currentUser.id)); }catch(e){}
  }
@@ -876,6 +902,8 @@ function setupPocketAutoLock(){
 
 
 async function enterNotebook(){
+ const menuToggle=document.getElementById("pocketMenuToggle");
+ if(menuToggle) menuToggle.style.display="grid";
  updateNetworkStatus();
  $("appLock").classList.add("hidden");
  $("app").classList.remove("hidden");
@@ -1086,6 +1114,9 @@ if(pocketAutoLockTimer){
 }
 
 async function startApp(user){
+ closePocketMenu();
+ const menuToggle=document.getElementById("pocketMenuToggle");
+ if(menuToggle) menuToggle.style.display="none";
  currentUser=user;
 
  allNotes=[];
@@ -2714,6 +2745,42 @@ async function copySupportUpi(){
   message.textContent="UPI ID: "+upiId+" — উপরের ID-টি চেপে ধরে কপি করুন।";
  }
 }
+
+
+// Sidebar navigation reuses the existing Dashboard, Settings and Notes sections.
+function togglePocketMenu(){
+ const menu=document.getElementById("pocketSideMenu");
+ if(menu && menu.classList.contains("open")) closePocketMenu();
+ else openPocketMenu();
+}
+function openPocketMenu(){
+ const menu=document.getElementById("pocketSideMenu");
+ const overlay=document.getElementById("pocketMenuOverlay");
+ const toggle=document.getElementById("pocketMenuToggle");
+ if(!menu || !overlay) return;
+ menu.classList.add("open"); overlay.classList.add("open");
+ menu.setAttribute("aria-hidden","false"); overlay.setAttribute("aria-hidden","false");
+ if(toggle){toggle.setAttribute("aria-expanded","true");toggle.setAttribute("aria-label","মেনু বন্ধ করুন");}
+ document.body.classList.add("pn-menu-open");
+}
+function closePocketMenu(){
+ const menu=document.getElementById("pocketSideMenu");
+ const overlay=document.getElementById("pocketMenuOverlay");
+ const toggle=document.getElementById("pocketMenuToggle");
+ if(!menu || !overlay) return;
+ menu.classList.remove("open"); overlay.classList.remove("open");
+ menu.setAttribute("aria-hidden","true"); overlay.setAttribute("aria-hidden","true");
+ if(toggle){toggle.setAttribute("aria-expanded","false");toggle.setAttribute("aria-label","মেনু খুলুন");}
+ document.body.classList.remove("pn-menu-open");
+}
+function navigatePocketMenu(targetId){
+ closePocketMenu();
+ const target=document.getElementById(targetId);
+ if(!target) return;
+ document.querySelectorAll(".pn-menu-item").forEach(item=>item.classList.toggle("active",item.dataset.menuTarget===targetId));
+ window.setTimeout(()=>target.scrollIntoView({behavior:"smooth",block:"start"}),80);
+}
+document.addEventListener("keydown",event=>{if(event.key==="Escape") closePocketMenu();});
 </script>
 
 </body>
