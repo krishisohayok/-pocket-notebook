@@ -803,24 +803,38 @@ async function makePinHash(pin,salt){
 
 let pocketAutoLockTimer = null;
 let pocketAutoLockEventsReady = false;
+const POCKET_AUTO_LOCK_MS = 5 * 60 * 1000;
 
-function resetPocketAutoLockTimer(){
+function pocketUnlockActivityKey(userId){
+ return "pocket_unlocked_activity_" + userId;
+}
 
+function resetPocketAutoLockTimer(recordActivity=true){
  if(pocketAutoLockTimer){
   clearTimeout(pocketAutoLockTimer);
+  pocketAutoLockTimer=null;
  }
+ if(!currentUser || $("app").classList.contains("hidden")) return;
 
- if(!currentUser || $("app").classList.contains("hidden")){
-  return;
+ const key=pocketUnlockActivityKey(currentUser.id);
+ if(recordActivity){
+  try{ sessionStorage.setItem(key,String(Date.now())); }catch(e){}
  }
-
- pocketAutoLockTimer = setTimeout(()=>{
-  lockPocketNotebook();
- }, 5 * 60 * 1000);
+ let lastActivity=0;
+ try{ lastActivity=Number(sessionStorage.getItem(key) || 0); }catch(e){}
+ if(!Number.isFinite(lastActivity) || lastActivity<=0){
+  lastActivity=Date.now();
+  try{ sessionStorage.setItem(key,String(lastActivity)); }catch(e){}
+ }
+ const remaining=Math.max(0,POCKET_AUTO_LOCK_MS-(Date.now()-lastActivity));
+ pocketAutoLockTimer=setTimeout(()=>lockPocketNotebook(),remaining);
 }
 
 function lockPocketNotebook(){
 
+ if(currentUser){
+  try{ sessionStorage.removeItem(pocketUnlockActivityKey(currentUser.id)); }catch(e){}
+ }
  if(!currentUser || $("app").classList.contains("hidden")){
   return;
  }
@@ -906,6 +920,7 @@ async function setAppPin(){
   );
 
   $("pinMsg").textContent="PIN সফলভাবে সংরক্ষিত!";
+  try{ sessionStorage.setItem(pocketUnlockActivityKey(currentUser.id),String(Date.now())); }catch(e){}
   await enterNotebook();
 
  }catch(error){
@@ -945,6 +960,7 @@ async function unlockApp(){
   }
 
   $("pinMsg").textContent="";
+  try{ sessionStorage.setItem(pocketUnlockActivityKey(currentUser.id),String(Date.now())); }catch(e){}
   await enterNotebook();
 
  }catch(error){
@@ -1042,6 +1058,9 @@ async function changeAppPin(){
 }
   
 async function signOut(){
+if(currentUser){
+ try{ sessionStorage.removeItem(pocketUnlockActivityKey(currentUser.id)); }catch(e){}
+}
 if(reminderCheckTimer){clearInterval(reminderCheckTimer);reminderCheckTimer=null;}
 if(pocketAutoLockTimer){
  clearTimeout(pocketAutoLockTimer);
@@ -1087,6 +1106,13 @@ async function startApp(user){
  );
 
  if(saved){
+  let lastActivity=0;
+  try{ lastActivity=Number(sessionStorage.getItem(pocketUnlockActivityKey(user.id)) || 0); }catch(e){}
+  if(Number.isFinite(lastActivity) && lastActivity>0 && Date.now()-lastActivity<POCKET_AUTO_LOCK_MS){
+   await enterNotebook();
+   return;
+  }
+  try{ sessionStorage.removeItem(pocketUnlockActivityKey(user.id)); }catch(e){}
   $("lockMessage").textContent="আপনার PIN লিখুন";
   $("pinSetup").classList.add("hidden");
   $("pinUnlock").classList.remove("hidden");
@@ -1382,6 +1408,7 @@ async function saveNote(){
 }
 
 function clearForm(){
+ restorePocketEditorPosition();
  $("title").value="";
  $("content").value="";
  $("category").value="ব্যক্তিগত";
@@ -1794,8 +1821,8 @@ function renderNotes(){
   const p=document.createElement("p");
   p.textContent=n.content || "";
   p.hidden=true;
-  h.setAttribute("aria-controls",noteCardElementId(n.id)+"-content");
   p.id=noteCardElementId(n.id)+"-content";
+  h.setAttribute("aria-controls",p.id);
   h.addEventListener("click",()=>{
    const isOpen=!p.hidden;
    p.hidden=isOpen;
@@ -1958,9 +1985,38 @@ async function togglePin(id,isPinned){
  $("saveMsg").textContent="পিন পরিবর্তন হয়েছে।";
 }
 
+let pocketEditorOriginalParent=null;
+let pocketEditorOriginalNextSibling=null;
+let pocketEditorCard=null;
+
+function restorePocketEditorPosition(){
+ if(!pocketEditorCard || !pocketEditorOriginalParent) return;
+ if(pocketEditorOriginalNextSibling && pocketEditorOriginalNextSibling.parentNode===pocketEditorOriginalParent){
+  pocketEditorOriginalParent.insertBefore(pocketEditorCard,pocketEditorOriginalNextSibling);
+ }else{
+  pocketEditorOriginalParent.appendChild(pocketEditorCard);
+ }
+ pocketEditorOriginalParent=null;
+ pocketEditorOriginalNextSibling=null;
+}
+
 function editNote(id){
- const n=allNotes.find(x=>x.id===id && !x.deleted_at);
+ const n=allNotes.find(x=>String(x.id)===String(id) && !x.deleted_at);
  if(!n)return;
+ const noteCard=document.getElementById(noteCardElementId(id));
+ if(!noteCard)return;
+
+ if(!pocketEditorCard){
+  pocketEditorCard=$("title").closest(".card");
+  if(pocketEditorCard){
+   pocketEditorOriginalParent=pocketEditorCard.parentNode;
+   pocketEditorOriginalNextSibling=pocketEditorCard.nextSibling;
+  }
+ }
+ if(pocketEditorCard){
+  pocketEditorCard.style.margin="12px 0";
+  noteCard.parentNode.insertBefore(pocketEditorCard,noteCard.nextSibling);
+ }
 
  $("title").value=n.title || "";
  $("content").value=n.content || "";
@@ -1970,7 +2026,10 @@ function editNote(id){
 
  editingId=id;
  $("cancelEdit").classList.remove("hidden");
- window.scrollTo({top:0,behavior:"smooth"});
+ if(pocketEditorCard){
+  pocketEditorCard.scrollIntoView({behavior:"smooth",block:"center"});
+  $("title").focus({preventScroll:true});
+ }
 }
 
 async function deleteNote(id){
