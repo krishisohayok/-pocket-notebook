@@ -353,6 +353,12 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
   <p class="support-note" id="supportCopyMessage" aria-live="polite">QR কোড স্ক্যান করুন অথবা UPI ID ব্যবহার করুন। সহায়তা সম্পূর্ণ ঐচ্ছিক।</p>
  </div>
 </section>
+<section class="download-app-card" id="installPocketCard" aria-label="Install Pocket Notebook">
+ <h3>📲 Install Pocket Notebook</h3>
+ <p>অ্যাপটি আপনার ফোনে ইনস্টল করে সহজে ব্যবহার করুন।</p>
+ <button type="button" class="download-app-button" id="installPocketCardButton" onclick="installPocketNotebook()">📲 Install করুন</button>
+ <p class="download-app-note">ইনস্টল করা থাকলে এই অপশনটি স্বয়ংক্রিয়ভাবে লুকানো থাকবে।</p>
+</section>
 <div class="card" id="userWelcomeCard">
 <p id="userInfo"></p>
 <p id="networkStatus" class="small">ইন্টারনেট সংযোগ যাচাই হচ্ছে...</p>
@@ -705,7 +711,7 @@ async function checkDueReminders(){
     await registration.showNotification("Pocket Notebook — Reminder",{
      body:note.title || "আপনার একটি নোটের সময় হয়েছে।",
      tag:"pocket-reminder-"+note.id,
-     icon:"./icons/pocket-notebook-192.png",
+     icon:"./pocket-notebook-192.png",
      data:{noteId:String(note.id)}
     });
     firedSet.add(String(note.id));
@@ -2808,15 +2814,22 @@ function navigatePocketMenu(targetId){
 }
 document.addEventListener("keydown",event=>{if(event.key==="Escape") closePocketMenu();});
 
-// Native PWA install prompt: show only when install is available and app is not installed.
+// Install controls: use the native PWA prompt when available, otherwise offer the APK.
 let pocketInstallPrompt=null;
+const POCKET_APK_URL="https://github.com/krishisohayok/-pocket-notebook/releases/download/v1.0.0/Pocket-Notebook.apk";
 function pocketIsInstalled(){
- return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.navigator.standalone===true;
+ try{
+  return window.matchMedia("(display-mode: standalone)").matches ||
+   window.matchMedia("(display-mode: fullscreen)").matches ||
+   window.navigator.standalone===true;
+ }catch(e){return window.navigator.standalone===true;}
 }
 function updatePocketInstallButton(){
- const button=document.getElementById("pocketInstallButton");
- if(!button) return;
- button.hidden=pocketIsInstalled() || !pocketInstallPrompt;
+ const installed=pocketIsInstalled();
+ const menuButton=document.getElementById("pocketInstallButton");
+ const installCard=document.getElementById("installPocketCard");
+ if(menuButton) menuButton.hidden=installed;
+ if(installCard) installCard.hidden=installed;
 }
 window.addEventListener("beforeinstallprompt",event=>{
  if(pocketIsInstalled()) return;
@@ -2828,15 +2841,31 @@ window.addEventListener("appinstalled",()=>{
  pocketInstallPrompt=null;
  updatePocketInstallButton();
 });
-function installPocketNotebook(){
- if(!pocketInstallPrompt) return;
- const promptEvent=pocketInstallPrompt;
- pocketInstallPrompt=null;
- updatePocketInstallButton();
- promptEvent.prompt();
- promptEvent.userChoice.then(()=>updatePocketInstallButton()).catch(()=>updatePocketInstallButton());
+async function installPocketNotebook(){
+ if(pocketIsInstalled()){
+  updatePocketInstallButton();
+  return;
+ }
+ if(pocketInstallPrompt){
+  const promptEvent=pocketInstallPrompt;
+  pocketInstallPrompt=null;
+  updatePocketInstallButton();
+  try{
+   await promptEvent.prompt();
+   await promptEvent.userChoice;
+  }catch(error){
+   console.warn("PWA install prompt unavailable; opening APK download.",error);
+   window.location.href=POCKET_APK_URL;
+  }
+  updatePocketInstallButton();
+  return;
+ }
+ // The native prompt may not be offered in some browsers or after it expires.
+ // Keep the Install controls useful by providing the official APK download.
+ window.location.href=POCKET_APK_URL;
 }
 window.addEventListener("pageshow",updatePocketInstallButton);
+document.addEventListener("DOMContentLoaded",updatePocketInstallButton);
 </script>
 
 </body>
