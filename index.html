@@ -113,6 +113,12 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 .support-options-toggle{display:block;width:100%;padding:14px 16px;margin:12px 0 0;background:#2457c5;color:#fff;border:0;border-radius:9px;text-align:center;font-weight:bold;font-size:16px;cursor:pointer}
 #supportPaymentOptions[hidden]{display:none!important}
 #supportPaymentOptions{padding-top:8px}
+
+.pocket-view{display:none}
+.pocket-view:not(.hidden){display:block}
+#notesWorkspace{display:block}
+#notesWorkspace.pocket-workspace-hidden{display:none!important}
+
 </style>
 </head>
 
@@ -129,32 +135,15 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <button type="button" class="pn-menu-item" data-menu-target="dashboard" onclick="navigatePocketMenu('dashboard')"><span class="pn-menu-icon" aria-hidden="true">📊</span><span>Dashboard</span></button>
  <button type="button" class="pn-menu-item" data-menu-target="pocketSettings" onclick="navigatePocketMenu('pocketSettings')"><span class="pn-menu-icon" aria-hidden="true">⚙️</span><span>Settings / সেটিংস</span></button>
  <button type="button" class="pn-menu-item" data-menu-target="notesSection" onclick="navigatePocketMenu('notesSection')"><span class="pn-menu-icon" aria-hidden="true">📝</span><span>My Notes / আমার নোট</span></button>
+ <a class="pn-menu-item" href="https://github.com/krishisohayok/-pocket-notebook/releases/download/v1.0.0/Pocket-Notebook.apk" style="text-decoration:none"><span class="pn-menu-icon" aria-hidden="true">📱</span><span>Android App ডাউনলোড</span></a>
 </nav>
 
 <main>
 
-<section class="download-app-card" aria-label="Download Pocket Notebook Android app">
- <h3>📱 Pocket Notebook Android App</h3>
- <p class="small">ওয়েবসাইটের পাশাপাশি আপনার Android ফোনেও Pocket Notebook ব্যবহার করুন।</p>
- <a class="download-app-button" href="https://github.com/krishisohayok/-pocket-notebook/releases/download/v1.0.0/Pocket-Notebook.apk">⬇️ Android App ডাউনলোড করুন</a>
- <p class="download-app-note">ডাউনলোড সম্পন্ন হলে APK ফাইলটি খুলে Install করুন।</p>
-</section>
 
 
-<section class="support-card" id="supportPocketNotebook" aria-label="Support Pocket Notebook">
- <h3>💙 Support Pocket Notebook</h3>
- <p>এই অ্যাপটি আপনার কাজে লাগলে, ইচ্ছা হলে স্বেচ্ছায় সামান্য সহায়তা করতে পারেন। আপনার সহায়তা অ্যাপটি উন্নত করতে উৎসাহ দেবে।</p>
- <button type="button" class="support-options-toggle" id="supportOptionsToggle"
-   aria-expanded="false" aria-controls="supportPaymentOptions"
-   onclick="toggleSupportOptions()">💙 Support করুন</button>
- <div id="supportPaymentOptions" hidden>
-  <img class="support-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=upi%3A%2F%2Fpay%3Fpa%3Dselimshaikh0051%40ybl%26pn%3DPocket%2520Notebook%26tn%3DSupport%2520Pocket%2520Notebook%26cu%3DINR" alt="Pocket Notebook-এর UPI পেমেন্ট QR কোড" loading="lazy">
-  <div class="support-upi" id="supportUpiId">selimshaikh0051@ybl</div>
-  <button type="button" class="support-copy" onclick="copySupportUpi()">📋 UPI ID কপি করুন</button>
-  <a class="support-pay" href="upi://pay?pa=selimshaikh0051@ybl&pn=Pocket%20Notebook&tn=Support%20Pocket%20Notebook&cu=INR">💸 UPI অ্যাপ দিয়ে সাহায্য করুন</a>
-  <p class="support-note" id="supportCopyMessage" aria-live="polite">QR কোড স্ক্যান করুন অথবা UPI ID ব্যবহার করুন। সহায়তা সম্পূর্ণ ঐচ্ছিক।</p>
- </div>
-</section>
+
+
 
 <section id="auth" class="card auth-card">
 <div class="auth-heading">
@@ -308,8 +297,25 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 </section>
   
 <section id="app" class="hidden">
-
-<!-- Settings: shown only inside the logged-in app -->
+<div id="pocketDashboardPage" class="pocket-view hidden">
+<div class="card" id="dashboard" style="margin:16px 0">
+ <h3>📊 Dashboard</h3>
+ <p class="small">আপনার নোটবুকের সংক্ষিপ্ত হিসাব</p>
+ <div class="dashboard-grid">
+  <div class="dashboard-stat"><span>মোট নোট</span><strong id="dashTotal">০</strong></div>
+  <div class="dashboard-stat"><span>📌 পিন করা</span><strong id="dashPinned">০</strong></div>
+  <div class="dashboard-stat"><span>⭐ Favorite</span><strong id="dashFavorites">০</strong></div>
+  <div class="dashboard-stat"><span>🗑️ Trash</span><strong id="dashTrash">০</strong></div>
+  <div class="dashboard-stat"><span>📅 আজকের নোট</span><strong id="dashToday">০</strong></div>
+  <div class="dashboard-stat"><span>🔔 অপঠিত নোটিফিকেশন</span><strong id="dashUnreadNotifications">০</strong></div>
+ </div>
+ <h4>ক্যাটাগরি অনুযায়ী</h4>
+ <div id="dashCategories" class="dashboard-categories"></div>
+ <h4 style="margin-top:18px">🕒 সাম্প্রতিক নোট</h4>
+ <div id="dashRecent"><p class="small">এখনও কোনো নোট নেই।</p></div>
+</div>
+</div>
+<div id="pocketSettingsPage" class="pocket-view hidden">
 <section class="card pocket-settings" id="pocketSettings" aria-label="Settings">
  <h3>⚙️ Settings / সেটিংস</h3>
  <p class="small">অ্যাপের তথ্য ও ব্যবহারের নীতিমালা</p>
@@ -324,13 +330,33 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
   <span class="pocket-settings-arrow" aria-hidden="true">›</span>
  </a>
 </section>
+</div>
 
 
-<div class="card">
+<!-- Settings: shown only inside the logged-in app -->
+
+
+
+<div id="notesWorkspace">
+<section class="support-card" id="supportPocketNotebook" aria-label="Support Pocket Notebook">
+ <h3>💙 Support Pocket Notebook</h3>
+ <p>এই অ্যাপটি আপনার কাজে লাগলে, ইচ্ছা হলে স্বেচ্ছায় সামান্য সহায়তা করতে পারেন। আপনার সহায়তা অ্যাপটি উন্নত করতে উৎসাহ দেবে।</p>
+ <button type="button" class="support-options-toggle" id="supportOptionsToggle"
+   aria-expanded="false" aria-controls="supportPaymentOptions"
+   onclick="toggleSupportOptions()">💙 Support করুন</button>
+ <div id="supportPaymentOptions" hidden>
+  <img class="support-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=upi%3A%2F%2Fpay%3Fpa%3Dselimshaikh0051%40ybl%26pn%3DPocket%2520Notebook%26tn%3DSupport%2520Pocket%2520Notebook%26cu%3DINR" alt="Pocket Notebook-এর UPI পেমেন্ট QR কোড" loading="lazy">
+  <div class="support-upi" id="supportUpiId">selimshaikh0051@ybl</div>
+  <button type="button" class="support-copy" onclick="copySupportUpi()">📋 UPI ID কপি করুন</button>
+  <a class="support-pay" href="upi://pay?pa=selimshaikh0051@ybl&pn=Pocket%20Notebook&tn=Support%20Pocket%20Notebook&cu=INR">💸 UPI অ্যাপ দিয়ে সাহায্য করুন</a>
+  <p class="support-note" id="supportCopyMessage" aria-live="polite">QR কোড স্ক্যান করুন অথবা UPI ID ব্যবহার করুন। সহায়তা সম্পূর্ণ ঐচ্ছিক।</p>
+ </div>
+</section>
+<div class="card" id="userWelcomeCard">
 <p id="userInfo"></p>
 <p id="networkStatus" class="small">ইন্টারনেট সংযোগ যাচাই হচ্ছে...</p>
 <div class="actions"><button type="button" class="secondary" onclick="showNotificationHistory()">🔔 Notification History <span id="notificationUnreadBadge"></span></button><button class="secondary" onclick="signOut()">লগআউট</button></div>
-
+</div>
 <div class="offers-card" aria-label="Optional advertising offers">
  <h3>🎁 Offers / বিজ্ঞাপন</h3>
  <p class="small">ইচ্ছা হলে এখানে চাপ দিয়ে অফার দেখতে পারেন। বিজ্ঞাপনটি আলাদা পেজে খুলবে।</p>
@@ -349,24 +375,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <a class="offers-button" href="https://asiafilm.org/4/5581ec290bedecb99050d72e5a812b5e" target="_blank" rel="noopener noreferrer">Offers দেখুন</a>
  <p class="offers-note">এই লিংকে বিজ্ঞাপন থাকতে পারে। ফিরে আসতে আগের ট্যাব বন্ধ করুন।</p>
 </div>
-
-<div class="card" id="dashboard" style="margin:16px 0">
- <h3>📊 Dashboard</h3>
- <p class="small">আপনার নোটবুকের সংক্ষিপ্ত হিসাব</p>
- <div class="dashboard-grid">
-  <div class="dashboard-stat"><span>মোট নোট</span><strong id="dashTotal">০</strong></div>
-  <div class="dashboard-stat"><span>📌 পিন করা</span><strong id="dashPinned">০</strong></div>
-  <div class="dashboard-stat"><span>⭐ Favorite</span><strong id="dashFavorites">০</strong></div>
-  <div class="dashboard-stat"><span>🗑️ Trash</span><strong id="dashTrash">০</strong></div>
-  <div class="dashboard-stat"><span>📅 আজকের নোট</span><strong id="dashToday">০</strong></div>
-  <div class="dashboard-stat"><span>🔔 অপঠিত নোটিফিকেশন</span><strong id="dashUnreadNotifications">০</strong></div>
- </div>
- <h4>ক্যাটাগরি অনুযায়ী</h4>
- <div id="dashCategories" class="dashboard-categories"></div>
- <h4 style="margin-top:18px">🕒 সাম্প্রতিক নোট</h4>
- <div id="dashRecent"><p class="small">এখনও কোনো নোট নেই।</p></div>
-</div>
-
+<div class="card" id="noteEditorCard">
 <h3 id="notesSection">নতুন নোট লিখুন</h3>
 <input id="title" placeholder="নোটের শিরোনাম">
 
@@ -412,8 +421,10 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 <button onclick="saveNote()">নোট সংরক্ষণ করুন</button>
 <button id="cancelEdit" class="secondary hidden" onclick="cancelEditing()">এডিট বাতিল করুন</button>
 <p id="saveMsg" class="small"></p>
-</div>
 
+
+
+</div>
 <div class="card">
 <h3>📒 আমার নোট</h3>
 
@@ -476,6 +487,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <div id="notificationHistoryList"></div>
 </section>
 
+</div>
 </section>
 </main>
 
@@ -2549,6 +2561,7 @@ async function resetPinAfterRecovery(){
     }
   
 async function showNotificationHistory(){
+ showPocketView("notes");
  const page=$("notificationHistoryPage");
  if(!page) return;
  page.classList.remove("hidden");
@@ -2773,12 +2786,24 @@ function closePocketMenu(){
  if(toggle){toggle.setAttribute("aria-expanded","false");toggle.setAttribute("aria-label","মেনু খুলুন");}
  document.body.classList.remove("pn-menu-open");
 }
+function showPocketView(view){
+ const workspace=document.getElementById("notesWorkspace");
+ const dashboardPage=document.getElementById("pocketDashboardPage");
+ const settingsPage=document.getElementById("pocketSettingsPage");
+ if(workspace) workspace.classList.toggle("pocket-workspace-hidden",view!=="notes");
+ const history=document.getElementById("notificationHistoryPage");
+ if(history && view!=="notes") history.classList.add("hidden");
+ if(dashboardPage) dashboardPage.classList.toggle("hidden",view!=="dashboard");
+ if(settingsPage) settingsPage.classList.toggle("hidden",view!=="settings");
+ const selected=view==="dashboard"?"dashboard":view==="settings"?"pocketSettings":"notesSection";
+ document.querySelectorAll(".pn-menu-item[data-menu-target]").forEach(item=>item.classList.toggle("active",item.dataset.menuTarget===selected));
+ window.scrollTo({top:0,behavior:"smooth"});
+}
 function navigatePocketMenu(targetId){
  closePocketMenu();
- const target=document.getElementById(targetId);
- if(!target) return;
- document.querySelectorAll(".pn-menu-item").forEach(item=>item.classList.toggle("active",item.dataset.menuTarget===targetId));
- window.setTimeout(()=>target.scrollIntoView({behavior:"smooth",block:"start"}),80);
+ if(targetId==="dashboard") showPocketView("dashboard");
+ else if(targetId==="pocketSettings") showPocketView("settings");
+ else showPocketView("notes");
 }
 document.addEventListener("keydown",event=>{if(event.key==="Escape") closePocketMenu();});
 </script>
