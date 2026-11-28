@@ -11,6 +11,8 @@
 
 <style>
 *{box-sizing:border-box}
+/* Respect the HTML hidden attribute even when component CSS sets display:flex/block. */
+[hidden]{display:none!important}
 body{margin:0;font-family:Arial,sans-serif;background:#f2f5f9;color:#202938}
 header{background:#2457c5;color:white;padding:20px;text-align:center;position:relative;min-height:116px}
 header h2{margin:12px 0 8px}
@@ -136,7 +138,6 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
  <button type="button" class="pn-menu-item" data-menu-target="pocketSettings" onclick="navigatePocketMenu('pocketSettings')"><span class="pn-menu-icon" aria-hidden="true">⚙️</span><span>Settings / সেটিংস</span></button>
  <button type="button" class="pn-menu-item" data-menu-target="notesSection" onclick="navigatePocketMenu('notesSection')"><span class="pn-menu-icon" aria-hidden="true">📝</span><span>My Notes / আমার নোট</span></button>
  <a class="pn-menu-item" href="https://github.com/krishisohayok/-pocket-notebook/releases/download/v1.0.0/Pocket-Notebook.apk" style="text-decoration:none"><span class="pn-menu-icon" aria-hidden="true">📱</span><span>Android App ডাউনলোড</span></a>
- <button type="button" class="pn-menu-item" id="pocketInstallButton" onclick="installPocketNotebook()" hidden><span class="pn-menu-icon" aria-hidden="true">📲</span><span>Install Pocket Notebook</span></button>
 </nav>
 
 <main>
@@ -2805,7 +2806,7 @@ function showPocketView(view){
  const selected=view==="dashboard"?"dashboard":view==="settings"?"pocketSettings":"notesSection";
  document.querySelectorAll(".pn-menu-item[data-menu-target]").forEach(item=>item.classList.toggle("active",item.dataset.menuTarget===selected));
 
- // Menu "My Notes" should open the notes list directly, not the workspace's top/support area.
+ // Menu "My Notes" opens the notes list directly, not the workspace's top/support area.
  if(view==="notes"){
   const notesList=document.getElementById("notes");
   const notesCard=notesList ? notesList.closest(".card") : null;
@@ -2878,6 +2879,12 @@ async function installPocketNotebook(){
 }
 window.addEventListener("pageshow",updatePocketInstallButton);
 document.addEventListener("DOMContentLoaded",updatePocketInstallButton);
+window.addEventListener("focus",updatePocketInstallButton);
+try{
+ const standaloneQuery=window.matchMedia("(display-mode: standalone)");
+ if(standaloneQuery.addEventListener) standaloneQuery.addEventListener("change",updatePocketInstallButton);
+ else if(standaloneQuery.addListener) standaloneQuery.addListener(updatePocketInstallButton);
+}catch(e){}
 </script>
 
 </body>
