@@ -22,7 +22,7 @@ button{background:#2457c5;color:white;border:0;font-weight:bold;cursor:pointer}
 .danger{background:#c0392b}
 .restore{background:#218838}
 .note{border-left:5px solid #2457c5}
-.note h3{margin:4px 0}
+.note h3{margin:4px 0}.note-title-toggle{width:auto;display:block;background:transparent;color:#2457c5;text-align:left;padding:4px 0;margin:4px 0;border:0;border-radius:0;font-size:18px;font-weight:bold;line-height:1.4}.note-title-toggle:focus-visible{outline:2px solid #2457c5;outline-offset:3px}
 .small{font-size:13px;color:#65758b}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 .actions button{flex:1;min-width:90px}
@@ -1785,11 +1785,23 @@ function renderNotes(){
   };
   div.style.borderLeftColor=categoryBorders[n.category || "অন্যান্য"] || categoryBorders["অন্যান্য"];
 
-  const h=document.createElement("h3");
-  h.textContent=n.title || "শিরোনামহীন নোট";
+  const h=document.createElement("button");
+  h.type="button";
+  h.className="note-title-toggle";
+  h.textContent="▸ "+(n.title || "শিরোনামহীন নোট");
+  h.setAttribute("aria-expanded","false");
 
   const p=document.createElement("p");
   p.textContent=n.content || "";
+  p.hidden=true;
+  h.setAttribute("aria-controls",noteCardElementId(n.id)+"-content");
+  p.id=noteCardElementId(n.id)+"-content";
+  h.addEventListener("click",()=>{
+   const isOpen=!p.hidden;
+   p.hidden=isOpen;
+   h.setAttribute("aria-expanded",String(!isOpen));
+   h.textContent=(isOpen ? "▸ " : "▾ ")+(n.title || "শিরোনামহীন নোট");
+  });
 
   const small=document.createElement("p");
   small.className="small";
